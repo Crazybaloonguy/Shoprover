@@ -19,7 +19,7 @@ Der Roboter folgt autonom der ihm zugewiesenen Person, transportiert Einkäufe u
 - Raspberry Pi (Zentral Steuerung, Sensorverarbeitung und Navigationslogik.)
 - ESP32 (Motorsteuerung)
 - LiDAR-Sensor (Hinderniserkennung und Entfernungsmessung)
-- UWB-Sensoren (Verfolgung der Person sowie Schätzung von Entfernung und Richtung)
+- [UWB-Sensoren](docs/UWB.md) (Verfolgung der Person sowie Schätzung von Entfernung und Richtung)
 - 4 Hoverboard-Motoren (Antrieb des Rovers)
 - Motorcontroller (Mit den ausgewählten Hoverboard-Motoren kompatible Steuerungen z.b. VESC)
 - 4 Servo Motoren (Für Lenkung des Rovers)
@@ -61,6 +61,9 @@ Akzeptanzkriterien:
 - Der zugewiesene UWB-Tag wird erkannt und verfolgt
 - Der eingestellte Folgeabstand wird innerhalb einer definierten Toleranz eingehalten
 - Wenn die Person nicht mehr zuverlässig lokalisiert werden kann, stoppt der Rover
+
+> [!NOTE] 
+> Detailierte Informationen über UWB Technologie finden sie [hier](docs/UWB.md)
 
 ### CF2 - Hinderniserkennung und Hindernisvermeidung
 
