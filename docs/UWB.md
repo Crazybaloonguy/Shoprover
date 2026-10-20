@@ -46,7 +46,7 @@ Das DWM3000 basiert auf dem DW3110 und unterstützt Ultra-Wideband-Kommunikation
 - **UWB-Tag:** Wird von der zu verfolgenden Person getragen und dient als Referenz für die Entfernungsmessung.
 - **UWB-Module (Qorvo DWM3000EVB):** Tauschen UWB-Signale mit dem Tag aus, um die Entfernung zwischen Tag und Modul zu bestimmen.
 - **ESP32:** Steuert die UWB-Module, verarbeitet die Messabläufe und stellt die ermittelten Messdaten bereit.
-- **Raspberry Pi 4:** Empfängt die Messdaten vom STM32, wertet sie aus und stellt sie den entsprechenden ROS-Komponenten zur Verfügung.
+- **Raspberry Pi 4:** Empfängt die Messdaten vom ESP32, wertet sie aus und stellt sie den entsprechenden ROS-Komponenten zur Verfügung.
 
 Die Kommunikation zwischen DWM3000EVB und ESP32 erfolgt über **SPI**. Für die Übertragung der Messdaten vom ESP32 zum Raspberry Pi kann eine serielle Verbindung verwendet werden, über ein USB Hub.
 
