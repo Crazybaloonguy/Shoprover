@@ -8,9 +8,11 @@ Im Shoprover wird UWB verwendet, um eine zugewiesene Person zu verfolgen und den
 
 ## 2. Wie funktioniert UWB im Shoprover?
 
-Die Person trägt einen UWB-Tag. Das System ermittelt die Entfernung und, abhängig von der Konfiguration, die Richtung beziehungsweise relative Position der Person.
+Die Person trägt einen UWB-Tag. Drei UWB-Receiver am Rover messen die Entfernung zum Tag. Durch die Kombination dieser Messungen kann die relative Position der Person geschätzt werden.
 
-Der Raspberry Pi verarbeitet diese Daten und berechnet die Bewegungsbefehle. Der ESP32 steuert daraufhin die Motoren.
+Der Raspberry Pi 4 verarbeitet die UWB-Messdaten und bindet die Positionsbestimmung in ROS ein. Die Kommunikation mit den drei Receivern erfolgt direkt über SPI. Ein Raspberry Pi Pico wird für die UWB-Kommunikation auf der Tag-Seite verwendet.
+
+Eine einzelne Entfernungsmessung liefert keine eindeutige Richtung. Dafür sind mehrere Messungen und ein geeignetes Verfahren zur Positionsbestimmung erforderlich.
 
 ```mermaid
 flowchart LR
@@ -71,32 +73,34 @@ Die Auswahl muss anhand der Genauigkeit, Zuverlässigkeit, Kosten und Integratio
 
 ## 5. Schnittstellen
 
-Für das UWB-basierte Personentracking werden **Qorvo DWM3000EVB** verwendet. Die UWB-Module werden über einen **ESP32** angesteuert. Ein **Raspberry Pi 4** übernimmt die Verarbeitung der Messdaten und die Einbindung in ROS.
+Für das UWB-basierte Personentracking werden **Qorvo DWM3000EVB** verwendet. Die drei UWB-Receiver am Rover sind direkt über **SPI mit dem Raspberry Pi 4** verbunden. Der Raspberry Pi übernimmt die Verarbeitung der Messdaten und die Einbindung in ROS.
 
-Das DWM3000 basiert auf dem DW3110 und unterstützt Ultra-Wideband-Kommunikation.
+Auf der Tag-Seite wird ein **Raspberry Pi Pico** zur Ansteuerung des UWB-Moduls verwendet.
 
 ### 5.1 Hardware und Kommunikation
 
-- **UWB-Tag:** Wird von der zu verfolgenden Person getragen und dient als Referenz für die Entfernungsmessung.
-- **UWB-Module (Qorvo DWM3000EVB):** Tauschen UWB-Signale mit dem Tag aus, um die Entfernung zwischen Tag und Modul zu bestimmen.
-- **ESP32:** Steuert die UWB-Module, verarbeitet die Messabläufe und stellt die ermittelten Messdaten bereit.
-- **Raspberry Pi 4:** Empfängt die Messdaten vom ESP32, wertet sie aus und stellt sie den entsprechenden ROS-Komponenten zur Verfügung.
+- **UWB-Transmitter (Qorvo DWM3000EVB):** Wird zusammen mit dem Raspberry Pi Pico auf der Tag-Seite verwendet und sendet beziehungsweise verarbeitet die UWB-Signale entsprechend der implementierten Kommunikation.
+- **Drei UWB-Receiver (Qorvo DWM3000EVB):** Sind am Rover installiert und messen die Entfernung zum UWB-Tag.
+- **Raspberry Pi Pico:** Steuert das UWB-Modul auf der Tag-Seite.
+- **Raspberry Pi 4:** Kommuniziert direkt über SPI mit den drei UWB-Receivern, verarbeitet deren Messdaten und stellt sie den entsprechenden ROS-Komponenten zur Verfügung.
 
-Die Kommunikation zwischen DWM3000EVB und ESP32 erfolgt über **SPI**. Für die Übertragung der Messdaten vom ESP32 zum Raspberry Pi kann eine serielle Verbindung verwendet werden, über ein USB Hub.
+Die Kommunikation zwischen dem Raspberry Pi 4 und den drei DWM3000EVB-Receivern erfolgt über SPI. Dabei müssen die Receiver eindeutig adressierbar sein, beispielsweise über separate Chip-Select-Leitungen. Zusätzlich sind die benötigten Interrupt- und Reset-Leitungen bei der Hardwareplanung zu berücksichtigen.
 
-Die übertragenen Daten sollten mindestens die gemessene Entfernung, einen Zeitstempel und einen Status zur Gültigkeit der Messung enthalten.
+Die Messdaten der Receiver werden auf dem Raspberry Pi 4 zusammengeführt. Sie sollten mindestens die gemessene Entfernung, einen Zeitstempel und einen Status zur Gültigkeit der Messung enthalten.
 
 ### 5.2 Entfernung und relative Position
 
-Für die UWB-basierte Personenerkennung werden drei UWB-Module am Rover installiert. Zwei Module befinden sich an den vorderen Ecken, während das dritte Modul mittig an der Rückseite angebracht wird. Die zu verfolgende Person trägt einen UWB-Tag.
+Für die UWB-basierte Personenerkennung werden drei UWB-Receiver am Rover installiert. Zwei Receiver befinden sich an den vorderen Ecken, während der dritte Receiver mittig an der Rückseite angebracht wird. Die zu verfolgende Person trägt einen UWB-Tag.
 
-Jedes Modul misst die Entfernung zum UWB-Tag anhand der Laufzeit der Funksignale (Time of Flight). Durch die Kombination der drei Entfernungsmessungen und der bekannten Positionen der Module am Rover kann die relative Position der Person geschätzt werden.
+Jeder Receiver misst die Entfernung zum UWB-Tag anhand der Laufzeit der Funksignale (*Time of Flight*). Durch die Kombination der drei Entfernungsmessungen und der bekannten Positionen der Receiver am Rover kann die relative Position der Person geschätzt werden.
 
-Die räumliche Anordnung der drei Module soll eine möglichst zuverlässige Positionsbestimmung aus unterschiedlichen Richtungen ermöglichen. Die tatsächliche Genauigkeit hängt unter anderem von der Montageposition, der Messqualität und den Umgebungsbedingungen ab.
+Die räumliche Anordnung der drei Receiver soll eine möglichst zuverlässige Positionsbestimmung aus unterschiedlichen Richtungen ermöglichen. Die tatsächliche Genauigkeit hängt unter anderem von der Montageposition, der Messqualität und den Umgebungsbedingungen ab.
+
+Da drei Entfernungsmessungen nicht in jeder Situation eine eindeutige Position garantieren, müssen die Positionsbestimmung und mögliche Mehrdeutigkeiten praktisch getestet werden.
 
 ### 5.3 Zuverlässigkeit der UWB-Messungen
 
-Die Genauigkeit und Stabilität der UWB-Messungen hängen von den Umgebungsbedingungen ab. Insbesondere Wände, Möbel, Personen und metallische Gegenstände können die Signalausbreitung beeinflussen. Bei fehlender direkter Sichtverbindung zwischen Tag und Modul (*Non-Line-of-Sight*, NLOS) können fehlerhafte oder ungenauere Entfernungen auftreten.
+Die Genauigkeit und Stabilität der UWB-Messungen hängen von den Umgebungsbedingungen ab. Insbesondere Wände, Möbel, Personen und metallische Gegenstände können die Signalausbreitung beeinflussen. Bei fehlender direkter Sichtverbindung zwischen Tag und Receiver (*Non-Line-of-Sight*, NLOS) können fehlerhafte oder ungenauere Entfernungen auftreten.
 
 Für die Bewertung der Zuverlässigkeit kann die wissenschaftliche Arbeit [*Omni-directional person tracking on a flying robot using occlusion-robust ultra-wideband signals*](https://ieeexplore.ieee.org/abstract/document/7759054) als Referenz dienen. Die dort beschriebenen Ergebnisse müssen jedoch unter den Bedingungen des Shoprover-Projekts überprüft werden.
 
@@ -104,7 +108,7 @@ Die Messungen sollen in unterschiedlichen Innenräumen getestet und mit bekannte
 
 ### 5.4 Verarbeitung und Filterung der Messdaten
 
-Die vom ESP32 übertragenen Messwerte werden auf dem Raspberry Pi auf Gültigkeit und Aktualität geprüft. Dabei sind insbesondere folgende Punkte zu berücksichtigen:
+Die vom Raspberry Pi 4 über SPI erfassten Messwerte werden auf Gültigkeit und Aktualität geprüft. Dabei sind insbesondere folgende Punkte zu berücksichtigen:
 
 - Erkennung veralteter oder ausbleibender Messwerte anhand von Zeitstempeln.
 - Erkennung unplausibler Entfernungen und plötzlicher Positionssprünge.
