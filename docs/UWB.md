@@ -12,7 +12,41 @@ Die Person trägt einen UWB-Tag. Das System ermittelt die Entfernung und, abhän
 
 Der Raspberry Pi verarbeitet diese Daten und berechnet die Bewegungsbefehle. Der ESP32 steuert daraufhin die Motoren.
 
-<img width="1212" height="297" alt="Aufbau" src="https://github.com/user-attachments/assets/8e09414e-35f1-4c4a-bc52-09ea7f960055" />
+```mermaid
+flowchart LR
+    P1(PICO No.1)
+    P2(PICO No.2)
+    Transmitter(Transmitter DWM3000EVB)
+    Receiver1(Receiver DWM3000EVB)
+    Receiver2(Receiver DWM3000EVB)
+    Receiver3(Receiver DWM3000EVB)
+    Raspberry("`Raspberry Pi 4 (**Master**)`")
+    W1(Wheel 1)
+    W2(Wheel 2)
+    M(Motor Controller)
+
+    subgraph PERSON
+        P1 --> Transmitter
+    end
+    subgraph SHOP ROVER
+        subgraph RECEIVER
+            Transmitter --> Receiver1
+            Transmitter --> Receiver2
+            Transmitter --> Receiver3
+        end
+        subgraph CONTROLLER
+            Receiver1 --> Raspberry
+            Receiver2 --> Raspberry
+            Receiver3 --> Raspberry
+            Raspberry --> P2
+        end
+        subgraph DRIVE UNIT
+            P2 --> M
+            M --> W1
+            M --> W2
+        end
+    end
+```
 
 Eine einzelne Entfernungsmessung liefert keine eindeutige Richtung. Dafür sind zusätzliche Messungen oder geeignete Verfahren zur Richtungsbestimmung erforderlich.
 
