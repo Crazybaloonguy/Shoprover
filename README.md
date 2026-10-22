@@ -17,12 +17,11 @@ Der Roboter folgt autonom der ihm zugewiesenen Person, transportiert Einkäufe u
 ## Hardware
 
 - Raspberry Pi (Zentral Steuerung, Sensorverarbeitung und Navigationslogik.)
-- ESP32 (Motorsteuerung)
+- Pi Pico (Motorsteuerung)
 - LiDAR-Sensor (Hinderniserkennung und Entfernungsmessung)
 - [UWB-Sensoren](docs/UWB.md) (Verfolgung der Person sowie Schätzung von Entfernung und Richtung)
-- 4 Hoverboard-Motoren (Antrieb des Rovers)
+- 2x Hoverboard-Motoren (Antrieb des Rovers)
 - Motorcontroller (Mit den ausgewählten Hoverboard-Motoren kompatible Steuerungen z.b. VESC)
-- 4 Servo Motoren (Für Lenkung des Rovers)
 - E-Bike-Akku (Hauptstromversorgung)
 - Spannungsregler und Stromverteilungskomponenten (Zur sicheren Versorgung der einzelnen Komponenten)
 
@@ -34,12 +33,12 @@ Der Roboter folgt autonom der ihm zugewiesenen Person, transportiert Einkäufe u
 - Position der Person anhand der UWB-Daten bestimmen
 - Bewegungs- und Lenkvorgaben berechnen
 - Hindernisse erkennen und beurteilen, ob eine Bewegung sicher ist
-- Bewegungsbefehle an den ESP32 senden
+- Bewegungsbefehle an den Pi Pico senden
 
-### ESP32 - Motorsteuerung
+### Pi Pico - Motorsteuerung
 
 - Motorgeschwindigkeit und Lenkung steuern
-- Bewegungsbefehle des Raspberry Pi ausführen
+- Bewegungsbefehle des Raspberry Pi ausführen (mit hilfe ros2)
 - Kommunikations-Timeouts und den Zustand der Steuerung überwachen
 
 ## Sensoren
@@ -97,7 +96,7 @@ Warum? Dadurch werden unkontrollierte Bewegungen verhindert, wenn die Kommunikat
 
 Akzeptanzkriterien:
 
-- Ein Kommunikationsverlust zwischen Raspberry Pi und ESP32 führt zum Stillstand
+- Ein Kommunikationsverlust zwischen Raspberry Pi und Pi Pico führt zum Stillstand
 - Ein Verlust der zuverlässigen Personenverfolgung führt zum Stillstand
 
 ## Aufgaben
@@ -107,8 +106,8 @@ Akzeptanzkriterien:
 - Einsatzumgebung und maximale Geschwindigkeit festlegen
 - Zielabstand zur Person und erforderlichen Anhalteweg definieren
 - Systemarchitektur entwerfen
-- Schnittstellen zwischen Raspberry Pi und ESP32 festlegen
-- Schnittstellen zwischen ESP32 und Antrieb festlegen
+- Schnittstellen zwischen Raspberry Pi und Pi Pico festlegen
+- Schnittstellen zwischen Pi Pico und Antrieb festlegen
 
 ### Task 2 - Fahrgestell und mechanischer Aufbau
 
@@ -119,10 +118,10 @@ Akzeptanzkriterien:
 ### Task 3 - Stromversorgung und Elektronik
 
 - Kompatible Motorcontroller auswählen
-- Stromversorgung für Motoren, Raspberry Pi, ESP32 und Sensoren entwerfen
+- Stromversorgung für Motoren, Raspberry Pi, Pi Pico und Sensoren entwerfen
 - Akkuspannung und Strombedarf überprüfen
 
-### Task 4 - Motorsteuerung (ESP32)
+### Task 4 - Motorsteuerung (Pi Pico)
 
 - Kommunikation mit den Motorcontrollern herstellen
 - Geschwindigkeits- und Lenksteuerung implementieren
@@ -155,11 +154,11 @@ Akzeptanzkriterien:
 
 ### Meilenstein 1 - Planung und Systemdesign abgeschlossen
 
-Ergebnis: Die Anforderungen, Systemarchitektur und Komponentenliste sind festgelegt. Die mechanische Konstruktion, die Stromversorgung sowie die Schnittstellen zwischen Raspberry Pi, ESP32, Sensoren und Motorcontrollern sind geplant.
+Ergebnis: Die Anforderungen, Systemarchitektur und Komponentenliste sind festgelegt. Die mechanische Konstruktion, die Stromversorgung sowie die Schnittstellen zwischen Raspberry Pi, Pi Pico, Sensoren und Motorcontrollern sind geplant.
 
 ### Meilenstein 2 - Grundsystem und Antrieb funktionsfähig
 
-Ergebnis: Das Fahrgestell ist aufgebaut und die Elektronik installiert. Der Rover kann unter Steuerung des ESP32 vorwärts- und rückwärtsfahren, lenken und sicher anhalten. Die grundlegenden Kommunikationsfunktionen sind implementiert.
+Ergebnis: Das Fahrgestell ist aufgebaut und die Elektronik installiert. Der Rover kann unter Steuerung des Pi Pico vorwärts- und rückwärtsfahren, lenken und sicher anhalten. Die grundlegenden Kommunikationsfunktionen sind implementiert.
 
 ### Meilenstein 3 - Autonome Navigation und Personenverfolgung integriert
 
