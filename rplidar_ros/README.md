@@ -42,8 +42,7 @@ rplidar Tutorial:  https://github.com/robopeak/rplidar_ros/wiki
     source ./install/setup.bash
     ```
 
-    > [!NOTE]
-    > Um Package dauerhaft in ros2 hinzuzufügen in bashrc einfügen:
+    Note: Um Package dauerhaft in ros2 hinzuzufügen in bashrc einfügen:
 
     ```bash
     $echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
