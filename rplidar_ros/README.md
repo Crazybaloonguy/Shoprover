@@ -77,6 +77,7 @@ rplidar Tutorial:  https://github.com/robopeak/rplidar_ros/wiki
    ros2 run rplidar_ros rplidar_composition
    ```
 
-Frame Orientation
 ---
-<img src="rplidar_A1.png" alt="" height="300"/>
+
+<img src="IMG_1992.JPEG" alt="" height="500"/>
+<img src="IMG_1993.JPEG" alt="" height="500"/>
