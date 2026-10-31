@@ -20,4 +20,4 @@ Die Komponenten bilden die Grundlage für den autonomen Shoprover:
 - **Personenverfolgung:** Vier UWB-Sensoren
 - **Hinderniserkennung:** RPLIDAR
 - **Zusätzliche Hinderniserkennung:** Sechs Ultraschallsensoren 
-- **Räder:**Zusätzliche Räder von einem Wagen eines Overhead-Projektors
+- **Räder:** Zusätzliche Räder von einem Wagen eines Overhead-Projektors
