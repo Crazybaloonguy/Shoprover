@@ -12,8 +12,8 @@ This is the ONLY file that should need editing for a different wiring.
 The package is called dw_platform (not "platform" as upstream) because
 CPython already has a standard-library module named `platform`.
 
-Requirements (Raspberry Pi OS Bookworm):
-    sudo raspi-config  ->  Interface Options -> SPI -> enable
+Requirements (Ubuntu for Raspberry Pi; see README.md for details):
+    dtparam=spi=on in /boot/firmware/config.txt, then reboot
     sudo apt install python3-spidev python3-lgpio
 
 Hardware/OS differences from the Pico version:
@@ -27,7 +27,14 @@ Hardware/OS differences from the Pico version:
 """
 
 import atexit
+import os
+import tempfile
 import threading
+
+# lgpio creates its notification pipes (.lgd-nfy*) for IRQ callbacks in its
+# working directory, which defaults to the current directory: that fails in
+# read-only directories and leaves root-owned files behind under sudo.
+os.environ.setdefault("LG_WD", tempfile.gettempdir())
 
 import lgpio
 import spidev
@@ -167,6 +174,8 @@ class Port:
         self.clear_dwic_isr()
         self._isr = handler
         gpio = self.pins["irq"]
+        # Re-claim the line (claimed as plain input in __init__) for edge alerts.
+        lgpio.gpio_free(self._h, gpio)
         lgpio.gpio_claim_alert(self._h, gpio, lgpio.RISING_EDGE, lgpio.SET_PULL_DOWN)
         self._irq_cb = lgpio.callback(self._h, gpio, lgpio.RISING_EDGE, self._irq_entry)
         # An edge that came before the callback was registered is lost; the

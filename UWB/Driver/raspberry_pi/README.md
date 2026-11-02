@@ -24,16 +24,60 @@ Qorvo DWM3000: https://www.qorvo.com/products/p/DWM3000
 ---
 ## Installation
 
-1. SPI aktivieren und Pakete installieren (Raspberry Pi OS Bookworm, einmalig)
+Anleitung für **Ubuntu (22.04 / 24.04) für Raspberry Pi**, einmalig einzurichten:
+
+1. SPI aktivieren
+
+   Ubuntu hat kein `raspi-config`, SPI wird direkt in `/boot/firmware/config.txt` eingeschaltet:
 
    ```
-   sudo raspi-config        # Interface Options -> SPI -> Enable, danach neu starten
+   sudo nano /boot/firmware/config.txt
+   ```
+
+   Dort muss im Abschnitt `[all]` (bzw. ohne Abschnitt am Dateiende) diese Zeile stehen, ohne `#` davor:
+
+   ```
+   dtparam=spi=on
+   ```
+
+   Danach neu starten (`sudo reboot`). Anschließend muss `/dev/spidev0.0` existieren (`ls /dev/spidev*`).
+
+2. Pakete installieren
+
+   ```
+   sudo apt update
    sudo apt install python3-spidev python3-lgpio
    ```
 
-   Danach muss `/dev/spidev0.0` existieren (`ls /dev/spidev*`).
+   Falls ein Paket nicht gefunden wird (Universe-Quelle fehlt: `sudo add-apt-repository universe`),
+   alternativ in einer virtuellen Umgebung:
 
-2. DWM3000EVB mit dem Pi verkabeln
+   ```
+   sudo apt install python3-venv python3-dev swig liblgpio-dev
+   python3 -m venv ~/dwm3000-venv
+   ~/dwm3000-venv/bin/pip install spidev lgpio
+   ```
+
+   Die Beispiele dann mit `~/dwm3000-venv/bin/python3` statt `python3` starten, auch mit `sudo`
+   (`sudo ~/dwm3000-venv/bin/python3 ...`), da `sudo python3` die Pakete aus der venv nicht sieht.
+
+3. Zugriffsrechte (optional, sonst alles mit `sudo` starten)
+
+   Unter Ubuntu gehören `/dev/spidev*` und `/dev/gpiochip*` standardmäßig `root`. Damit der eigene Benutzer
+   ohne `sudo` darauf zugreifen darf:
+
+   ```
+   sudo groupadd -f spi
+   sudo groupadd -f gpio
+   sudo usermod -aG spi,gpio $USER
+   echo 'SUBSYSTEM=="spidev", GROUP="spi", MODE="0660"
+   SUBSYSTEM=="gpio", KERNEL=="gpiochip*", GROUP="gpio", MODE="0660"' | sudo tee /etc/udev/rules.d/99-dwm3000.rules
+   sudo reboot
+   ```
+
+   Nach dem Neustart prüfen: `ls -l /dev/spidev0.0 /dev/gpiochip0` zeigt die Gruppen `spi` bzw. `gpio`.
+
+4. DWM3000EVB mit dem Pi verkabeln
 
    | DWM3000EVB | Raspberry Pi 4 |
    |---|---|
@@ -51,7 +95,7 @@ Qorvo DWM3000: https://www.qorvo.com/products/p/DWM3000
 
    Andere Pins: `PINS` in [`dw_platform/port.py`](dw_platform/port.py) anpassen.
 
-3. Den ganzen Ordner `Driver/` auf den Pi kopieren (z. B. `git clone` oder `scp -r`), nicht nur `raspberry_pi/`.
+5. Den ganzen Ordner `Driver/` auf den Pi kopieren (z. B. `git clone` oder `scp -r`), nicht nur `raspberry_pi/`.
 
 # Beispiele
 
@@ -71,7 +115,10 @@ python3 raspberry_pi/examples/util_pin_test/main.py
 python3 raspberry_pi/examples/util_read_dev_id_spi_only/main.py
 ```
 
-Ist der Benutzer nicht in der Gruppe `spi`/`gpio` (Standardbenutzer ist es), mit `sudo` starten.
+Ohne die Zugriffsrechte aus Installation Schritt 3 alle Befehle mit `sudo` starten (z. B. `sudo python3 raspberry_pi/run.py ...`).
+
+Note: Der Pin-Test schaltet auch die SPI-Pins auf Eingang. Ubuntu hat das Tool `pinctrl` meist nicht, mit dem der
+Test sie danach zurückstellt -- dann den Pi nach dem Pin-Test neu starten, sonst funktioniert SPI nicht.
 
 1. Verbindung testen
 

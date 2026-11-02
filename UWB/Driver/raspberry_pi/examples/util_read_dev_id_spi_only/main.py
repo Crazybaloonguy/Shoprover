@@ -83,8 +83,12 @@ def main():
     try:
         spi.open(SPI_BUS, SPI_CS)
     except FileNotFoundError:
-        print("FEHLER: /dev/spidev%d.%d fehlt -- SPI mit sudo raspi-config "
-              "(Interface Options -> SPI) aktivieren und neu starten." % (SPI_BUS, SPI_CS))
+        print("FEHLER: /dev/spidev%d.%d fehlt -- SPI aktivieren: dtparam=spi=on in "
+              "/boot/firmware/config.txt eintragen und neu starten." % (SPI_BUS, SPI_CS))
+        return
+    except PermissionError:
+        print("FEHLER: kein Zugriff auf /dev/spidev%d.%d -- mit sudo starten oder "
+              "Zugriffsrechte einrichten (README, Installation Schritt 3)." % (SPI_BUS, SPI_CS))
         return
     spi.mode = 0
     spi.bits_per_word = 8
