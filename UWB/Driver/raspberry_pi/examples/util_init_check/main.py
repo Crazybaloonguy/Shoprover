@@ -36,6 +36,13 @@ def devid_line(label):
     return ok
 
 
+def levels_line(label):
+    irq = port.irq.value() if port.irq is not None else "-"
+    rst = port.rst.value()
+    print("  %-36s RSTn=%s  IRQ=%s%s" % (
+        label, rst, irq, "" if rst else "   <- RSTn low: chip is held in reset!"))
+
+
 def status_line(label):
     status = dwt.dwt_read32bitreg(R.SYS_STATUS_ID)
     print("  %-36s SYS_STATUS 0x%08x  (RCINIT=%d)" % (
@@ -56,8 +63,10 @@ def run_startup(label, set_rate):
     print(label)
     set_rate()
     print("  SPI-Takt eingestellt:               %d Hz" % port.spi.max_speed_hz)
+    levels_line("Leitungen vor reset_dwic():")
     port.reset_dwic()
     time.sleep_ms(2)
+    levels_line("Leitungen nach reset_dwic():")
     status_line("nach reset_dwic():")
     waited = idle_wait()
     print("  dwt_checkidlerc():                  %s" % (

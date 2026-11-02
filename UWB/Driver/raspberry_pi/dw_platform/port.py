@@ -56,7 +56,7 @@ PINS = {
     "spi_bus":  0,      # /dev/spidev<bus>.<cs>
     "spi_cs":   0,      # CE0
     "gpiochip": 0,      # Pi 4 header GPIOs are on /dev/gpiochip0
-    "rst":      25,     # DW3000 RSTn -- open-drain, active low
+    "rst":      25,     # DW3000 RSTn -- open-drain (by hand), active low
     "irq":      24,     # DW3000 IRQ -> host (None = not wired)
     "wakeup":   23,     # DW3000 WAKEUP (None = not wired)
 }
@@ -110,9 +110,12 @@ class Port:
 
         self._h = lgpio.gpiochip_open(self.pins["gpiochip"])
 
-        # --- reset line: open-drain, so writing 1 releases it and the
-        #     external pull-up takes it high; writing 0 asserts reset ---
-        lgpio.gpio_claim_output(self._h, self.pins["rst"], 1, lgpio.SET_OPEN_DRAIN)
+        # --- reset line: open-drain behaviour done by hand, as on the Pico:
+        #     "asserting reset" = output low, "released" = input without pull,
+        #     so the DW3000 takes the line high itself. (lgpio's SET_OPEN_DRAIN
+        #     relies on kernel emulation on this GPIO controller.) As an input
+        #     the line also reads back the real level, see rst.value(). ---
+        lgpio.gpio_claim_input(self._h, self.pins["rst"], lgpio.SET_PULL_NONE)
         self.rst = Line(self._h, self.pins["rst"])
 
         # --- IRQ from DW3000 ---
@@ -152,9 +155,12 @@ class Port:
         Hard-reset the DW3000. Open-drain drive low, hold briefly, release,
         then wait for the IC to complete its internal boot/OTP-load sequence.
         """
-        self.rst.value(0)
+        rst = self.pins["rst"]
+        lgpio.gpio_free(self._h, rst)
+        lgpio.gpio_claim_output(self._h, rst, 0)
         time.sleep_ms(2)
-        self.rst.value(1)  # release -> pulled high externally
+        lgpio.gpio_free(self._h, rst)
+        lgpio.gpio_claim_input(self._h, rst, lgpio.SET_PULL_NONE)  # release
         time.sleep_ms(2)   # allow DW3000 internal boot to complete
 
     # -----------------------------------------------------------------
