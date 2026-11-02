@@ -215,6 +215,7 @@ def dwt_readdevid() -> int:
 
 def dwt_check_dev_id() -> int:
     dev_id = dwt_readdevid()
+    print("DW3000 device ID: 0x%08X" % dev_id)
     if dev_id not in (R.DWT_C0_DEV_ID, R.DWT_C0_PDOA_DEV_ID):
         return R.DWT_ERROR
     return R.DWT_SUCCESS

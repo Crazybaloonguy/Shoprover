@@ -28,6 +28,13 @@ DEV_ID is register file 0, offset 0, so the read is a one-byte "fast access"
 header 0x00 followed by 4 data bytes, little-endian -- the same transaction
 decadriver's dwt_readdevid() produces (dwt_xfer3000, FARW mode).
 
+That header is all zeros, which is also what the DW3000 sees on a broken
+MOSI wire (it has an internal pull-down), so this read alone cannot tell
+whether MOSI works. A second check therefore reads DEV_ID again with the
+2-byte extended-address header 0x40 0x00: only if MOSI carries the 0x40 does
+DEV_ID come back in bytes 2-5; a chip that saw 0x00 0x00 answers one byte
+early, giving 0x..DECA03.
+
 Unlike the Pico version there is no per-wire line check with the GPIO pulls:
 while SPI is enabled the kernel owns the SPI pins (CE0 is even claimed as a
 GPIO), so they can't be switched to inputs from here. Use util_pin_test for
@@ -49,6 +56,7 @@ SPEEDS_HZ = (2_000_000, 500_000)
 READS_PER_SPEED = 5
 
 DEV_ID_HEADER = [0x00]
+DEV_ID_HEADER_EXT = [0x40, 0x00]    # extended address mode, file 0, offset 0, read
 KNOWN_DEV_IDS = {
     0xDECA0302: "DW3000 C0 (DW3110, as on the DWM3000)",
     0xDECA0312: "DW3000 C0 with PDOA (DW3120)",
@@ -59,6 +67,28 @@ def read_dev_id(spi):
     rx = spi.xfer2(DEV_ID_HEADER + [0] * 4)
     raw = bytes(rx[1:])
     return raw, int.from_bytes(raw, "little")
+
+
+def mosi_check(spi):
+    """Read DEV_ID with a non-zero header; returns True if MOSI works."""
+    print()
+    print("MOSI-Check (DEV_ID mit Header 40 00, braucht funktionierendes MOSI):")
+    ok = True
+    for i in range(READS_PER_SPEED):
+        rx = spi.xfer2(DEV_ID_HEADER_EXT + [0] * 4)
+        dev_id = int.from_bytes(bytes(rx[2:]), "little")
+        print("  #%d  raw %s  DEV_ID 0x%08x" % (
+            i + 1, " ".join("%02x" % b for b in rx[2:]), dev_id))
+        ok = ok and dev_id in KNOWN_DEV_IDS
+        time.sleep(0.02)
+    if ok:
+        print("  OK: Chip versteht die gesendeten Befehle -- MOSI funktioniert")
+    elif dev_id & 0x00FFFFFF == 0x00DECA03:
+        print("  FEHLER: Chip hat 00 statt 40 empfangen -- MOSI kommt nicht an.")
+        print("          MOSI-Kabel pruefen: EVB MOSI (D11) -> GPIO10 = physischer Pin 19")
+    else:
+        print("  FEHLER: unplausibel -- MOSI (GPIO10, Pin 19) und SCK (GPIO11, Pin 23) pruefen")
+    return ok
 
 
 def explain(raw, dev_id):
@@ -118,11 +148,15 @@ def main():
     if ok_speed is None:
         print("Ergebnis: DEV_ID NICHT gelesen. Verkabelung pruefen (siehe oben).")
     else:
-        print("Ergebnis: DEV_ID 0x%08x bei %d kHz gelesen -- SPI funktioniert."
+        print("Ergebnis: DEV_ID 0x%08x bei %d kHz gelesen -- SCK, MISO und CSn funktionieren."
               % (dev_id, ok_speed // 1000))
         if ok_speed != SPEEDS_HZ[0]:
             print("Hinweis: nur bei niedrigem Takt stabil -- Kabel kuerzen.")
         spi.max_speed_hz = ok_speed
+        if not mosi_check(spi):
+            print()
+            print("Ergebnis: MISO ok (DEV_ID lesbar), aber MOSI defekt -- der Treiber kann so")
+            print("nicht initialisieren (INIT FAILED).")
 
     # Keep reading so wires can be wiggled; only changes are printed.
     print()
