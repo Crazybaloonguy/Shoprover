@@ -47,14 +47,22 @@ import utime as time
 #   SPI CLK   ->  GPIO11 (pin 23)   SPI0 SCLK
 #   SPI MISO  ->  GPIO9  (pin 21)   SPI0 MISO
 #   SPI MOSI  ->  GPIO10 (pin 19)   SPI0 MOSI
-#   SPI CSn   ->  GPIO8  (pin 24)   SPI0 CE0 (driven by the kernel)
+#   SPI CSn   ->  GPIO27 (pin 13)   driven by this driver (see "cs" below)
 #   RSTn      ->  GPIO25 (pin 22)
 #   IRQ       ->  GPIO24 (pin 18)
 #   WAKEUP    ->  GPIO23 (pin 16)
+#
+# Chip select: on some kernels (seen on Ubuntu) the SPI driver does not
+# release CE0 between back-to-back transfers, so the DW3000 sees one endless
+# transfer (util_cs_timing shows it). With "cs" set to a GPIO, this driver
+# raises/lowers CSn itself around every transfer, as on the Pico; the
+# kernel's CE0 (GPIO8, pin 24) still toggles but stays unconnected.
+# "cs": None = wire CSn to CE0 and let the kernel drive it.
 # ---------------------------------------------------------------------------
 PINS = {
     "spi_bus":  0,      # /dev/spidev<bus>.<cs>
     "spi_cs":   0,      # CE0
+    "cs":       27,     # DW3000 CSn driven by hand (None = kernel CE0)
     "gpiochip": 0,      # Pi 4 header GPIOs are on /dev/gpiochip0
     "rst":      25,     # DW3000 RSTn -- open-drain (by hand), active low
     "irq":      24,     # DW3000 IRQ -> host (None = not wired)
@@ -109,6 +117,16 @@ class Port:
         self.lock = threading.RLock()
 
         self._h = lgpio.gpiochip_open(self.pins["gpiochip"])
+
+        # --- chip select by hand (active low, idle high), see PINS ---
+        self.cs = None
+        if self.pins.get("cs") is not None:
+            try:
+                lgpio.gpio_claim_output(self._h, self.pins["cs"], 1)
+            except lgpio.error as e:
+                raise RuntimeError("CS GPIO%d not usable (%s) -- pick a free GPIO for "
+                                   "\"cs\" in dw_platform/port.py" % (self.pins["cs"], e))
+            self.cs = Line(self._h, self.pins["cs"])
 
         # --- reset line: open-drain behaviour done by hand, as on the Pico:
         #     "asserting reset" = output low, "released" = input without pull,

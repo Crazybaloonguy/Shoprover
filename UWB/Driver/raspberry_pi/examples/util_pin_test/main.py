@@ -11,7 +11,8 @@ releasing it prints another one. Stop with Ctrl-C.
 Run with the DWM3000EVB unplugged: python3 examples/util_pin_test/main.py
 
 Notes for the Pi:
-  - GPIO0/1 (ID EEPROM) are not tested.
+  - GPIO0/1 (ID EEPROM) and GPIO14/15 (UART, reserved on the robot) are
+    not tested.
   - GPIO2/3 have 1.8 kOhm pull-ups on the board, so they work as usual.
   - Pins the kernel has claimed (with SPI enabled: CE0/CE1 = GPIO8/7) are
     reported as "belegt" and skipped.
@@ -44,14 +45,12 @@ PINS = (
     (5, 29, None),
     (6, 31, None),
     (7, 26, None),
-    (8, 24, "SPI CSn (D10)"),
+    (8, 24, None),
     (9, 21, "SPI MISO (D12)"),
     (10, 19, "SPI MOSI (D11)"),
     (11, 23, "SPI CLK (D13)"),
     (12, 32, None),
     (13, 33, None),
-    (14, 8, None),
-    (15, 10, None),
     (16, 36, None),
     (17, 11, None),
     (18, 12, None),
@@ -63,7 +62,7 @@ PINS = (
     (24, 18, "IRQ (D8)"),
     (25, 22, "RSTn (D7)"),
     (26, 37, None),
-    (27, 13, None),
+    (27, 13, "SPI CSn (D10)"),
 )
 
 # A pin must read the same level this long before a change is reported, so a

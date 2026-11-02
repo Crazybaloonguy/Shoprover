@@ -15,7 +15,10 @@ matching the upstream project's split between "build the header" (target
 independent) and "shove bytes over the wire" (target specific).
 
 spidev's xfer2() keeps CE0 asserted for the whole call, so header and body
-go out as one list. Each transaction holds port.lock, so the IRQ callback
+go out as one list. With port.cs set (see PINS in port.py), CSn is a plain
+GPIO lowered and raised around each xfer2() instead, because some kernels
+do not release CE0 between back-to-back transfers. Each transaction holds
+port.lock, so the IRQ callback
 thread cannot run dwt_isr in the middle of it.
 """
 
@@ -28,7 +31,13 @@ def writetospi(header: bytes, body: bytes) -> None:
     transaction (CS held low across both).
     """
     with port.lock:
-        port.spi.xfer2(list(header) + list(body or b""))
+        if port.cs is not None:
+            port.cs.value(0)
+        try:
+            port.spi.xfer2(list(header) + list(body or b""))
+        finally:
+            if port.cs is not None:
+                port.cs.value(1)
 
 
 def readfromspi(header: bytes, readlength: int) -> bytes:
@@ -37,5 +46,11 @@ def readfromspi(header: bytes, readlength: int) -> bytes:
     both. Returns the bytes read (NOT including the header).
     """
     with port.lock:
-        rx = port.spi.xfer2(list(header) + [0] * readlength)
+        if port.cs is not None:
+            port.cs.value(0)
+        try:
+            rx = port.spi.xfer2(list(header) + [0] * readlength)
+        finally:
+            if port.cs is not None:
+                port.cs.value(1)
     return bytes(rx[len(header):])

@@ -84,7 +84,9 @@ def main():
     print("Dateien auf diesem Pi:")
     print("  %s" % os.path.abspath(port_module.__file__))
     print("  SPI_SLOW_HZ = %d, SPI_FAST_HZ = %d" % (port_module.SPI_SLOW_HZ, port_module.SPI_FAST_HZ))
-    print("  RSTn GPIO%s, IRQ GPIO%s" % (port.pins["rst"], port.pins["irq"]))
+    print("  CSn %s, RSTn GPIO%s, IRQ GPIO%s" % (
+        "GPIO%d (von Hand)" % port.pins["cs"] if port.pins.get("cs") is not None else "CE0 (Kernel)",
+        port.pins["rst"], port.pins["irq"]))
 
     slow_ok = run_startup("1) Start mit langsamem SPI (wie ex_00a):", port.spi_set_rate_low)
     fast_ok = run_startup("2) Start mit schnellem SPI (wie ex_05b):", port.spi_set_rate_high)

@@ -10,7 +10,7 @@ Pico und Pi in [`Driver/`](..). Dieser Ordner enthält nur die Pi-spezifischen T
 | | Pico (MicroPython), [`../pico_pi`](../pico_pi) | Raspberry Pi 4 (CPython), dieser Ordner |
 |---|---|---|
 | Hardware-Schicht | `dw_platform/` | `dw_platform/` |
-| SPI | `machine.SPI`, CS per GPIO | `spidev` (`/dev/spidev0.0`), CS = Hardware-CE0 |
+| SPI | `machine.SPI`, CS per GPIO | `spidev` (`/dev/spidev0.0`), CS per GPIO (`lgpio`) |
 | GPIO / IRQ | `machine.Pin`, Soft-IRQ | `lgpio`, Callback-Thread + Lock |
 | Zeit | `utime` (eingebaut) | [`utime.py`](utime.py) (Nachbau mit `time`) |
 | Beispiele starten | Thonny | [`run.py`](run.py) |
@@ -84,7 +84,7 @@ Anleitung für **Ubuntu (22.04 / 24.04) für Raspberry Pi**, einmalig einzuricht
    | SPI CLK | GPIO11 (Pin 23) |
    | SPI MISO | GPIO9 (Pin 21) |
    | SPI MOSI | GPIO10 (Pin 19) |
-   | SPI CSn | GPIO8 / CE0 (Pin 24) |
+   | SPI CSn | GPIO27 (Pin 13) |
    | 3V3 | 3V3 (Pin 17) |
    | GND | GND (z. B. Pin 20) |
    | RSTn, optional | GPIO25 (Pin 22) |

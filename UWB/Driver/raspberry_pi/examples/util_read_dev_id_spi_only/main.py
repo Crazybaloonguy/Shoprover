@@ -15,7 +15,7 @@ Wiring (same as dw_platform/port.py):
     SPI CLK  (D13)  ->  GPIO11 (pin 23)
     SPI MISO (D12)  ->  GPIO9  (pin 21)
     SPI MOSI (D11)  ->  GPIO10 (pin 19)
-    SPI CSn  (D10)  ->  GPIO8  (pin 24, CE0)
+    SPI CSn  (D10)  ->  GPIO27 (pin 13)   driven here via lgpio, see CS_GPIO
     3V3             ->  3V3    (pin 17)   EVB jumper J1 "up" (3V3 from header)
     GND             ->  GND    (pin 20)
 
@@ -43,12 +43,17 @@ continuity checks.
 
 import time
 
+import lgpio
 import spidev
 
 APP_NAME = "READ DEV ID, SPI only (Raspberry Pi) v0.1"
 
 SPI_BUS = 0
-SPI_CS = 0      # CE0 = GPIO8
+SPI_CS = 0      # CE0 = GPIO8 (toggled by the kernel, not connected)
+# CSn is driven by hand like in dw_platform/port.py ("cs"): some kernels do
+# not release CE0 between back-to-back transfers. None = CSn on CE0 instead.
+CS_GPIO = 27
+_cs = None     # (gpiochip handle, gpio) while CS_GPIO is claimed
 
 # 2 MHz is the driver's pre-init rate (port.py SPI_SLOW_HZ); 500 kHz is a
 # fallback for long or loose jumper wires.
@@ -64,7 +69,7 @@ KNOWN_DEV_IDS = {
 
 
 def read_dev_id(spi):
-    rx = spi.xfer2(DEV_ID_HEADER + [0] * 4)
+    rx = xfer(spi, DEV_ID_HEADER + [0] * 4)
     raw = bytes(rx[1:])
     return raw, int.from_bytes(raw, "little")
 
@@ -75,7 +80,7 @@ def mosi_check(spi):
     print("MOSI-Check (DEV_ID mit Header 40 00, braucht funktionierendes MOSI):")
     ok = True
     for i in range(READS_PER_SPEED):
-        rx = spi.xfer2(DEV_ID_HEADER_EXT + [0] * 4)
+        rx = xfer(spi, DEV_ID_HEADER_EXT + [0] * 4)
         dev_id = int.from_bytes(bytes(rx[2:]), "little")
         print("  #%d  raw %s  DEV_ID 0x%08x" % (
             i + 1, " ".join("%02x" % b for b in rx[2:]), dev_id))
@@ -95,8 +100,8 @@ def explain(raw, dev_id):
     if dev_id in KNOWN_DEV_IDS:
         return "OK: " + KNOWN_DEV_IDS[dev_id]
     if raw == b"\xff\xff\xff\xff":
-        return ("FEHLER: nur 0xFF -- MISO (GPIO9) nicht verbunden, CSn (GPIO8) "
-                "nicht verbunden, oder Modul ohne Strom (3V3/GND, Jumper J1)")
+        return ("FEHLER: nur 0xFF -- MISO (GPIO9) nicht verbunden, CSn (GPIO%s) "
+                "nicht verbunden, oder Modul ohne Strom (3V3/GND, Jumper J1)") % CS_GPIO
     if raw == b"\x00\x00\x00\x00":
         return ("FEHLER: nur 0x00 -- MISO haengt auf GND, MISO nicht verbunden, "
                 "oder Modul ohne Strom (3V3/GND, Jumper J1)")
@@ -106,7 +111,19 @@ def explain(raw, dev_id):
             "evtl. vertauscht, oder Kabel zu lang/wackelig")
 
 
+def xfer(spi, data):
+    """One SPI transfer, framed by the hand-driven CSn if CS_GPIO is set."""
+    if _cs is None:
+        return spi.xfer2(data)
+    lgpio.gpio_write(_cs[0], _cs[1], 0)
+    try:
+        return spi.xfer2(data)
+    finally:
+        lgpio.gpio_write(_cs[0], _cs[1], 1)
+
+
 def main():
+    global _cs
     print(APP_NAME)
 
     spi = spidev.SpiDev()
@@ -121,6 +138,10 @@ def main():
               "Zugriffsrechte einrichten (README, Installation Schritt 3)." % (SPI_BUS, SPI_CS))
         return
     spi.mode = 0
+    if CS_GPIO is not None:
+        h = lgpio.gpiochip_open(0)
+        lgpio.gpio_claim_output(h, CS_GPIO, 1)
+        _cs = (h, CS_GPIO)
     spi.bits_per_word = 8
 
     ok_speed = None
@@ -175,6 +196,8 @@ def main():
         print("stopped after %d reads" % count)
     finally:
         spi.close()
+        if _cs is not None:
+            lgpio.gpiochip_close(_cs[0])
 
 
 if __name__ == "__main__":
