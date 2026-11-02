@@ -88,6 +88,8 @@ DWT_TIME_UNITS = R.DWT_TIME_UNITS
 
 def main():
     print(APP_NAME)
+    for name, pin in port.pins.items():
+        print("  %-10s %s" % (name, pin))
 
     port.spi_set_rate_high()
     port.reset_dwic()
