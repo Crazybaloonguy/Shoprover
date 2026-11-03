@@ -20,6 +20,13 @@ fn main() {
 	let mut spi = Spi::new(Bus::Spi0, SlaveSelect::Ss0, 1_000_000, Mode::Mode0)
 		.expect("Failed to configure the spi");
 	let gpio = Gpio::new().expect("Failed to configure GPIO");
+
+	// SPI-Pins muessen auf Alt0 stehen (= SPI0), sonst ist SPI nicht aktiv
+	for (nr, name) in [(9u8, "MISO"), (10, "MOSI"), (11, "SCLK"), (8, "CE0 ")] {
+		let mode = gpio.get(nr).expect("Failed to read pin").mode();
+		println!("GPIO{:<2} {}  Modus: {:?}", nr, name, mode);
+	}
+
 	let mut cs = gpio.get(8).expect("Failed to set up CS PIN").into_output();
 	cs.set_high();
 
@@ -34,10 +41,12 @@ fn main() {
 	thread::sleep(Duration::from_millis(10));
 	println!("RSTn (GPIO25) nach Reset: {}", if reset.is_high() { "High" } else { "Low" });
 
-	// 1) Roh-Lesen von DEV_ID ohne Treiber: Header 0x00 + 4 Dummy-Bytes
+	// 1) Roh-Lesen von DEV_ID ohne Treiber: Header 0x00 + 4 Dummy-Bytes.
+	// Die Dummy-Bytes ignoriert der DW3000 beim Lesen. Bei einer Bruecke
+	// MOSI -> MISO (Loopback-Test) kommen genau diese Bytes zurueck: [00, A5, 5A, A5, 5A]
 	let mut buf = [0u8; 5];
 	cs.set_low();
-	spi.transfer(&mut buf, &[0u8; 5]).expect("SPI transfer failed");
+	spi.transfer(&mut buf, &[0x00, 0xA5, 0x5A, 0xA5, 0x5A]).expect("SPI transfer failed");
 	cs.set_high();
 	let raw = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
 	println!("Roh-SPI  DEV_ID = 0x{:08X}  (Bytes: {:02X?})", raw, buf);
