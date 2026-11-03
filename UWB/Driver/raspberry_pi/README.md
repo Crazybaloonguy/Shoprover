@@ -1,164 +1,57 @@
-DWM3000 Python Treiber (Raspberry Pi 4)
----
+# Rust DW3000 Driver [![crates.io](https://img.shields.io/crates/v/dw3000.svg)](https://crates.io/crates/dw3000) [![Documentation](https://docs.rs/dw3000/badge.svg)](https://docs.rs/dw3000)
+## Introduction
 
-Python-Treiber und Beispielprogramme für den Qorvo DW3000 (UWB) auf einem
-**Raspberry Pi 4** mit einem **DWM3000EVB**.
+Driver for the Decawave [DW3000] UWB transceiver, written in the [Rust] programming language. We used the crate dw1000 developped for the [DW1000] module and changed the registers access and spi functions, added fast command and implemented some high level functions.
 
-Der Treiber selbst (`decadriver/`, `shared_data/`, `config_options.py`) und die Beispiele liegen gemeinsam für
-Pico und Pi in [`Driver/`](..). Dieser Ordner enthält nur die Pi-spezifischen Teile:
+[DW3000]: https://www.decawave.com/product/decawave-dw3000-ic/
+[Rust]: https://www.rust-lang.org/
+[DW1000]: https://crates.io/crates/dw1000
 
-| | Pico (MicroPython), [`../pico_pi`](../pico_pi) | Raspberry Pi 4 (CPython), dieser Ordner |
-|---|---|---|
-| Hardware-Schicht | `dw_platform/` | `dw_platform/` |
-| SPI | `machine.SPI`, CS per GPIO | `spidev` (`/dev/spidev0.0`), CS per GPIO (`lgpio`) |
-| GPIO / IRQ | `machine.Pin`, Soft-IRQ | `lgpio`, Callback-Thread + Lock |
-| Zeit | `utime` (eingebaut) | [`utime.py`](utime.py) (Nachbau mit `time`) |
-| Beispiele starten | Thonny | [`run.py`](run.py) |
 
-Weitere Infos zum DW3000 / DWM3000:
+## Status
 
-dwm3000-micropython (Original): https://github.com/foldedtoad/dwm3000-micropython
+Both RTT methods (single and double sided) are working and giving good positioning values.
+No implementation of PDoA or AoA.
 
-Qorvo DWM3000: https://www.qorvo.com/products/p/DWM3000
+We tested the crate using two different platforms; both platforms examples are available on dedicated repository (raspberry pi and STM32F103RB)
+Examples available are basic communication and distance measurement between two modules (single and double sided RTT)
 
----
-## Installation
+We built the driver on top of embedded-hal, which means it is portable and can be used on any platform that implements the embedded-hal API.
 
-Anleitung für **Ubuntu (22.04 / 24.04) für Raspberry Pi**, einmalig einzurichten:
 
-1. SPI aktivieren
+## Usage
 
-   Ubuntu hat kein `raspi-config`, SPI wird direkt in `/boot/firmware/config.txt` eingeschaltet:
-
-   ```
-   sudo nano /boot/firmware/config.txt
-   ```
-
-   Dort muss im Abschnitt `[all]` (bzw. ohne Abschnitt am Dateiende) diese Zeile stehen, ohne `#` davor:
-
-   ```
-   dtparam=spi=on
-   ```
-
-   Danach neu starten (`sudo reboot`). Anschließend muss `/dev/spidev0.0` existieren (`ls /dev/spidev*`).
-
-2. Pakete installieren
-
-   ```
-   sudo apt update
-   sudo apt install python3-spidev python3-lgpio
-   ```
-
-   Falls ein Paket nicht gefunden wird (Universe-Quelle fehlt: `sudo add-apt-repository universe`),
-   alternativ in einer virtuellen Umgebung:
-
-   ```
-   sudo apt install python3-venv python3-dev swig liblgpio-dev
-   python3 -m venv ~/dwm3000-venv
-   ~/dwm3000-venv/bin/pip install spidev lgpio
-   ```
-
-   Die Beispiele dann mit `~/dwm3000-venv/bin/python3` statt `python3` starten, auch mit `sudo`
-   (`sudo ~/dwm3000-venv/bin/python3 ...`), da `sudo python3` die Pakete aus der venv nicht sieht.
-
-3. Zugriffsrechte (optional, sonst alles mit `sudo` starten)
-
-   Unter Ubuntu gehören `/dev/spidev*` und `/dev/gpiochip*` standardmäßig `root`. Damit der eigene Benutzer
-   ohne `sudo` darauf zugreifen darf:
-
-   ```
-   sudo groupadd -f spi
-   sudo groupadd -f gpio
-   sudo usermod -aG spi,gpio $USER
-   echo 'SUBSYSTEM=="spidev", GROUP="spi", MODE="0660"
-   SUBSYSTEM=="gpio", KERNEL=="gpiochip*", GROUP="gpio", MODE="0660"' | sudo tee /etc/udev/rules.d/99-dwm3000.rules
-   sudo reboot
-   ```
-
-   Nach dem Neustart prüfen: `ls -l /dev/spidev0.0 /dev/gpiochip0` zeigt die Gruppen `spi` bzw. `gpio`.
-
-4. DWM3000EVB mit dem Pi verkabeln
-
-   | DWM3000EVB | Raspberry Pi 4 |
-   |---|---|
-   | SPI CLK | GPIO11 (Pin 23) |
-   | SPI MISO | GPIO9 (Pin 21) |
-   | SPI MOSI | GPIO10 (Pin 19) |
-   | SPI CSn | GPIO27 (Pin 13) |
-   | 3V3 | 3V3 (Pin 17) |
-   | GND | GND (z. B. Pin 20) |
-   | RSTn, optional | GPIO25 (Pin 22) |
-   | IRQ, optional | GPIO24 (Pin 18) |
-   | WAKEUP, optional | GPIO23 (Pin 16) |
-
-   **Jumper J1 auf dem EVB auf „Up“** stellen, damit das Modul die 3,3 V vom Pi bekommt.
-
-   Andere Pins: `PINS` in [`dw_platform/port.py`](dw_platform/port.py) anpassen.
-
-5. Den ganzen Ordner `Driver/` auf den Pi kopieren (z. B. `git clone` oder `scp -r`), nicht nur `raspberry_pi/`.
-
-# Beispiele
-
-Die gemeinsamen Beispiele (`Driver/examples/`) über `run.py` starten, das die Importpfade setzt.
-Name oder Pfad des Beispiels angeben, stoppen mit `Strg+C`:
-
-```
-cd Driver
-python3 raspberry_pi/run.py ex_00a_reading_dev_id
-python3 raspberry_pi/run.py                          # listet alle Beispiele
+Include this crate in your Cargo project by adding the following to `Cargo.toml`:
+```toml
+[dependencies]
+dw3000 = "0.2.0"
 ```
 
-Die zwei Verkabelungstests sind Pi-spezifisch und eigenständig, sie werden direkt gestartet:
+We also provided workspaces in which you can find some example depending of the target (raspberry pi or stm32f103rb).
+We built stm32f103rb examples using the app-template of the knurling project. 
+Unfortunately, you cannot build your example directly from the main repository, you need to navigate to the examples folder to build and run applications. 
 
-```
-python3 raspberry_pi/examples/util_pin_test/main.py
-python3 raspberry_pi/examples/util_read_dev_id_spi_only/main.py
-```
 
-Ohne die Zugriffsrechte aus Installation Schritt 3 alle Befehle mit `sudo` starten (z. B. `sudo python3 raspberry_pi/run.py ...`).
+## Documentation
 
-Note: Der Pin-Test schaltet auch die SPI-Pins auf Eingang. Ubuntu hat das Tool `pinctrl` meist nicht, mit dem der
-Test sie danach zurückstellt -- dann den Pi nach dem Pin-Test neu starten, sonst funktioniert SPI nicht.
+Please refer to the **[API Reference]**.
+Please refer to our github for exemples **[github link]**.
 
-1. Verbindung testen
+Please also refer to the [DW3000 User Manual] 
 
-   ```
-   raspberry_pi/examples/util_pin_test/main.py               Pins und Kabel prüfen (EVB abstecken)
-   raspberry_pi/examples/util_read_dev_id_spi_only/main.py   SPI prüfen, nur SPI-Leitungen nötig
-   raspberry_pi/run.py ex_00a_reading_dev_id                 DEV_ID über den Treiber lesen
-   ```
+[API Reference]: https://docs.rs/dw3000
+[DW3000 User Manual]: https://www.decawave.com/wp-content/uploads/2021/05/DW3000-User-Manual-1.pdf#page=110&zoom=100,68,106
+[github link]: https://github.com/SII-Public-Research/dw3000
 
-   Erwartete Ausgabe: DEV_ID `0xdeca0302`
+## License
 
-2. Senden und Empfangen
+This project is open source software, licensed under the terms of the [Zero Clause BSD License][] (0BSD, for short). This basically means you can do anything with the software, without any restrictions, but you can't hold the authors liable for problems.
 
-   ```
-   Board 1:  raspberry_pi/run.py ex_02a_simple_rx
-   Board 2:  raspberry_pi/run.py ex_01a_simple_tx
-   ```
+See [LICENSE.md] for full details.
 
-3. Entfernungsmessung
+[Zero Clause BSD License]: https://opensource.org/licenses/0BSD
+[LICENSE.md]: LICENSE.md
 
-   Den Responder immer zuerst starten.
 
-   ```
-   Board 1:  raspberry_pi/run.py ex_06b_ss_twr_responder
-   Board 2:  raspberry_pi/run.py ex_06a_ss_twr_initiator
-   ```
-
-   oder (Double-Sided)
-
-   ```
-   Board 1:  raspberry_pi/run.py ex_05b_ds_twr_responder
-   Board 2:  raspberry_pi/run.py ex_05a_ds_twr_initiator
-   ```
-
-   Note: Die Boards ein paar Minuten warmlaufen lassen, danach wird die Messung deutlich genauer.
-
-Note: Pi und Pico können gemischt werden, z. B. Responder auf dem Pico, Initiator auf dem Pi.
-Beide benutzen dieselben Beispiele und damit dieselbe Funk-Konfiguration.
-
-Note: Linux ist kein Echtzeitsystem. Die Antwortzeiten in den Beispielen sind (wie beim Pico)
-großzügig gewählt, einzelne verpasste Antworten durch Scheduler-Verzögerungen sind trotzdem möglich.
-
----
+**Based on [Braun Embedded](https://braun-embedded.com/)** <br />
+**Modified by SII** <br />
