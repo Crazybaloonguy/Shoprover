@@ -59,6 +59,7 @@ fn main() {
 
 	// Reset: RSTn kurz Low, dann loslassen
 	let mut reset = gpio.get(25).expect("RSTn").into_io(GpioMode::Output);
+	reset.set_pullupdown(PullUpDown::PullUp);
 	reset.set_low();
 	thread::sleep(Duration::from_millis(2));
 	reset.set_mode(GpioMode::Input);

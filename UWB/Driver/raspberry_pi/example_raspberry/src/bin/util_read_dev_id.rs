@@ -8,7 +8,7 @@
 
 	Start: cargo run --release --bin util_read_dev_id
 */
-use rppal::gpio::{Gpio, Mode as GpioMode};
+use rppal::gpio::{Gpio, Mode as GpioMode, PullUpDown};
 use rppal::spi::{Bus, Mode, SlaveSelect, Spi};
 
 use std::thread;
@@ -32,6 +32,9 @@ fn main() {
 
 	// Pegel von RSTn vor dem Reset (sollte 1 sein, interner Pull-up)
 	let mut reset = gpio.get(25).expect("Failed to set up RESET PIN").into_io(GpioMode::Input);
+	// Pi-interner Pull-down (GPIO9-27 nach dem Booten) wuerde RSTn halb auf Low ziehen.
+	// Stattdessen Pi-Pull-up (~50k) einschalten: RSTn sicher High, aber nicht aktiv getrieben.
+	reset.set_pullupdown(PullUpDown::PullUp);
 	println!("RSTn (GPIO25) vor Reset: {}", if reset.is_high() { "High" } else { "Low" });
 
 	reset.set_mode(GpioMode::Output);
