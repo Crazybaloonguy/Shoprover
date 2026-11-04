@@ -12,6 +12,8 @@ pub struct Ready;
 #[derive(Debug)]
 pub struct Sending {
 	pub(super) finished: bool,
+	/// true if the frame was scheduled with `SendTime::Delayed`
+	pub(super) delayed: bool,
 }
 impl Sending {
 	/// Mark the receiving state as finished

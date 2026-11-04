@@ -28,20 +28,6 @@ where
 	/// DWM1001-Dev board, that the `dwm1001` crate has explicit support for
 	/// this.
 	pub fn s_wait(&mut self) -> nb::Result<Instant, Error<SPI, CS>> {
-		// Check Half Period Warning Counter. If this is a delayed transmission,
-		// this will indicate that the delay was too short, and the frame was
-		// sent too late.
-		let evc_hpw = self
-			.ll
-			.evc_hpw()
-			.read()
-			.map_err(|error| nb::Error::Other(Error::Spi(error)))?
-			.value();
-
-		if evc_hpw != 0 {
-			return Err(nb::Error::Other(Error::DelayedSendTooLate))
-		}
-		
 		// WARNING s:
 		// If you're changing anything about which SYS_STATUS flags are being
 		// checked in this method, also make sure to update `enable_interrupts`.
@@ -53,7 +39,25 @@ where
 
 		// Has the frame been sent?
 		if sys_status.txfrs() == 0b0 {
-			// Frame has not been sent
+			// Frame has not been sent yet.
+			// Check Half Period Warning Counter only for delayed sends and only
+			// while the frame is still pending: then it indicates that the delay
+			// was too short and the chip would wait a whole timer period (~17 s).
+			// For SendTime::Now the counter is meaningless and used to produce
+			// spurious DelayedSendTooLate errors.
+			if self.state.delayed {
+				let evc_hpw = self
+					.ll
+					.evc_hpw()
+					.read()
+					.map_err(|error| nb::Error::Other(Error::Spi(error)))?
+					.value();
+
+				if evc_hpw != 0 {
+					return Err(nb::Error::Other(Error::DelayedSendTooLate))
+				}
+			}
+
 			return Err(nb::Error::WouldBlock)
 		}
 

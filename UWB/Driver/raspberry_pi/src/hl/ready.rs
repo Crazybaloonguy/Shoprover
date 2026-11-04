@@ -177,6 +177,8 @@ where
 				.fine_plen(0) // Not implemented, replacing txpsr
 		})?;
 
+		let delayed = matches!(send_time, SendTime::Delayed(_));
+
 		match send_time {
 			| SendTime::Delayed(time) => {
 				// Put the time into the delay register
@@ -198,7 +200,7 @@ where
 		Ok(DW3000 {
 			ll:    self.ll,
 			seq:   self.seq,
-			state: Sending { finished: false },
+			state: Sending { finished: false, delayed },
 		})
 	}
 
