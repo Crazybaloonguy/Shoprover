@@ -29,7 +29,7 @@ import utime as time
 # checks that board's schematic -- anything needing them raises, rather than
 # silently driving some unrelated GPIO.
 # ---------------------------------------------------------------------------
-BOARD = "flexypin"          # "ardupico" or "flexypin"
+BOARD = "ardupico"          # "ardupico" or "flexypin"
 
 _RST_GPIO_BY_BOARD = {
     "ardupico": 7,

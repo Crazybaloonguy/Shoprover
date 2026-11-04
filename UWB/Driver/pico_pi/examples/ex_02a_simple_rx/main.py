@@ -25,7 +25,7 @@ config = DwtConfig(
     rxPAC=R.DWT_PAC8,                # used in RX only
     txCode=9,                        # used in TX only
     rxCode=9,                        # used in RX only
-    sfdType=0,                       # non-standard 8 symbol SFD
+    sfdType=0,                       
     dataRate=R.DWT_BR_6M8,
     phrMode=R.DWT_PHRMODE_STD,
     phrRate=R.DWT_PHRRATE_STD,
@@ -51,14 +51,14 @@ def main():
 
     # DW3000 supports up to 38 MHz SPI once initialised/configured.
     port.spi_set_rate_high()
-
     port.reset_dwic()
-
+    
     time.sleep_ms(2)  # let DW3000 transition INIT_RC -> IDLE_RC
-
+    
     while not dwt.dwt_checkidlerc():
+        print(dwt.dwt_checkidlerc())
         pass  # make sure the DW IC is in IDLE_RC before proceeding
-
+    
     if dwt.dwt_initialise(R.DWT_DW_INIT) == R.DWT_ERROR:
         print("INIT FAILED")
         while True:
