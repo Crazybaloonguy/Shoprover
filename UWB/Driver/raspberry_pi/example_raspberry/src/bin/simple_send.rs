@@ -73,6 +73,7 @@ fn main() -> ! {
                 println!("Error");
                 dw3000 = sending.finish_sending().expect("Failed to finish sending");
                 continue // Start a new loop iteration
+                println!("Error: {:?}", _e);
             }
         };
 
