@@ -71,10 +71,11 @@ RX_ANT_DLY = 16385
 
 # IEEE 802.15.4 data frames, 9-byte MAC header:
 #   0-1 frame control (0x8841: data, PAN ID compression, short addresses),
-#   2 sequence number, 3-4 PAN ID (0xDECA), 5-6 destination (0xFFFF =
-#   broadcast), 7-8 source ("TG"), then the MAC payload.
+#   2 sequence number, 3-4 PAN ID (0xFFFF = broadcast, so the frame also
+#   passes the anchor's frame filter if that is on), 5-6 destination
+#   (0xFFFF = broadcast), 7-8 source ("TG"), then the MAC payload.
 # The DW IC appends the 2-byte checksum.
-MAC_HDR = bytes([0x41, 0x88, 0, 0xCA, 0xDE, 0xFF, 0xFF, ord('T'), ord('G')])
+MAC_HDR = bytes([0x41, 0x88, 0, 0xFF, 0xFF, 0xFF, 0xFF, ord('T'), ord('G')])
 MAC_HDR_LEN = len(MAC_HDR)
 ALL_MSG_SN_IDX = 2
 tx_poll_msg = bytearray(MAC_HDR + bytes([0x21]))           # payload content is ignored by the anchor

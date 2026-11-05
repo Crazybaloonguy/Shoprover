@@ -1,4 +1,4 @@
-use rppal::gpio::{Gpio, Mode as GpioMode, PullUpDown};
+use rppal::gpio::{Gpio, Mode as GpioMode, OutputPin, PullUpDown};
 use rppal::spi::{Bus, Mode, SlaveSelect, Spi};
 
 use std::thread;
@@ -8,9 +8,61 @@ use dw3000::{
 	self,
 	hl,
 	Config,
+	FastCommand,
 	time::Instant
 };
 use nb::block;
+
+type Dw = hl::DW3000<Spi, OutputPin, hl::Ready>;
+
+/// Waits for a good frame and returns its RX timestamp and MAC payload.
+/// RX errors are printed and the receiver is re-enabled, instead of aborting
+/// the program.
+fn receive_frame(dw3000: Dw) -> (Dw, u64, Vec<u8>) {
+	let mut receiving = dw3000
+		.receive(Config::default())
+		.expect("Failed configure receiver.");
+	loop {
+		let mut buffer = [0; 1024];
+		match block!(receiving.r_wait(&mut buffer)) {
+			Ok(msg) => {
+				let rx_time = msg.rx_time.value();
+				let payload = msg.frame.payload.to_vec();
+				let dw3000 = receiving
+					.finish_receiving()
+					.expect("Failed to finish receiving");
+				return (dw3000, rx_time, payload);
+			},
+			Err(e) => {
+				let ffen = receiving.ll().sys_cfg().read().map(|r| r.ffen()).unwrap_or(0xFF);
+				println!("RX error {:?} (frame filtering enabled: {}), listening again", e, ffen);
+
+				// Error flags are write-1-to-clear; r_wait would report them again otherwise.
+				receiving.ll()
+					.sys_status()
+					.write(|w| {
+						w.rxprd(0b1)
+							.rxsfdd(0b1)
+							.ciadone(0b1)
+							.rxphd(0b1)
+							.rxphe(0b1)
+							.rxfr(0b1)
+							.rxfcg(0b1)
+							.rxfce(0b1)
+							.rxfsl(0b1)
+							.rxfto(0b1)
+							.ciaerr(0b1)
+							.rxovrr(0b1)
+							.rxpto(0b1)
+							.rxsto(0b1)
+							.arfe(0b1)
+					})
+					.expect("Failed to clear RX status");
+				receiving.fast_cmd(FastCommand::CMD_RX).expect("Failed to restart receiver");
+			},
+		}
+	}
+}
 
 fn main() -> ! {
     
@@ -65,15 +117,9 @@ fn main() -> ! {
 		/****************************************************** */
 		println!("FIRST STEP : Waiting measurement request ...");
 
-        let mut receiving = dw3000
-			.receive(Config::default())
-			.expect("Failed configure receiver.");
-	    let mut buffer = [0; 1024];
-		let t2: u64 = block!(receiving.r_wait(&mut buffer)).expect("error during the reception").rx_time.value();
-	    dw3000 = receiving
-		    .finish_receiving()
-		    .expect("Failed to finish receiving");
-        
+		let (dw, t2, _) = receive_frame(dw3000);
+		dw3000 = dw;
+
 
 		/****************************************************** */
 		/*********       RESPONDING TO INITIATOR       ******** */
@@ -99,15 +145,12 @@ fn main() -> ! {
 		/****************************************************** */
     	println!("THIRD STEP : Waiting for an answer...");
 
-		let mut receiving = dw3000
-			.receive(Config::default())
-			.expect("Failed configure receiver.");
-		let mut buffer = [0; 1024];
-		let result = block!(receiving.r_wait(&mut buffer));
-		dw3000 = receiving.finish_receiving().expect("Failed to finish receiving");
-		
-		let result = result.unwrap();
-		let x = result.frame.payload;
+		let (dw, t6, x) = receive_frame(dw3000);
+		dw3000 = dw;
+		if x.len() < 15 {
+			println!("Final too short ({} bytes), restarting\n", x.len());
+			continue;
+		}
 		let t1: u64 = ((x[0] as u64) << (8 * 4)) 
 					+ ((x[1] as u64) << (8 * 3))
 					+ ((x[2] as u64) << (8 * 2))
@@ -123,7 +166,6 @@ fn main() -> ! {
 					+ ((x[12] as u64) << (8 * 2))
 					+ ((x[13] as u64) <<  8)
 					+ ( x[14] as u64);
-		let t6: u64 = result.rx_time.value();
 
 		println!("Distance = {} m", calc_distance_double(t1, t2, t3, t4, t5, t6));
 		println!("--- RTT FINISHED ---\n");
