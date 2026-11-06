@@ -95,7 +95,7 @@ fn main() -> ! {
 	/************        BASIC CONFIGURATION      ********** */
 	/******************************************************* */
 
-    let spi = Spi::new(Bus::Spi0, SlaveSelect::Ss0, 4_500_000, Mode::Mode0)
+    let spi = Spi::new(Bus::Spi0, SlaveSelect::Ss0, 1_000_000, Mode::Mode0)
         .expect("Failed to configure the spi");
     let gpio = Gpio::new()
         .expect("Failed to configure GPIO");
