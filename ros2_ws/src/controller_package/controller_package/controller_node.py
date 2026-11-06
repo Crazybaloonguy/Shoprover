@@ -1,7 +1,9 @@
+import math
+
 import rclpy
 from rclpy.node import Node
 
-from std_msgs.msg import String
+from sensor_msgs.msg import LaserScan
 
 class ControllerNode(Node):
 
@@ -9,17 +11,28 @@ class ControllerNode(Node):
         super().__init__('controller_node')
         print("Controller Node Initialized")
         self.subscription = self.create_subscription(
-            String,
-            'scan',
-            self.listener_callback,
+            LaserScan,
+            '/scan', # Lidar scan
+            self.rplidar_callback,
             10)
         self.subscription  # prevent unused variable warning
 
-    def listener_callback(self, msg):
-        self.get_logger().info('I heard: "%s"' % msg.data)
-        # Hier können Sie die Logik implementieren, um die Daten zu verarbeiten und den Roboter zu steuern.
-        # Zum Beispiel könnten Sie die Daten analysieren und entsprechende Steuerbefehle senden.
-        # self.send_control_command(processed_data)  # Beispiel für das Senden von Steuerbefehlen
+    def rplidar_callback(self, msg):
+        obstacles = [
+            (distance, math.degrees(angle))
+            for index, distance in enumerate(msg.ranges)
+            for angle in [msg.angle_min + index * msg.angle_increment]
+            if -math.pi / 6 <= angle <= math.pi / 6
+            and msg.range_min <= distance < 0.5
+            and math.isfinite(distance)
+        ]
+        obstacle_detected = bool(obstacles)
+
+        if obstacle_detected:
+            closest_distance, closest_angle = min(obstacles)
+            self.get_logger().warn(
+                f'Hindernis bei {closest_distance:.2f} m '
+                f'bei {closest_angle:.1f} Grad')
 
 
 def main(args=None):
