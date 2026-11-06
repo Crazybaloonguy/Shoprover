@@ -105,4 +105,24 @@ where
 		self.ll.fast_command(fc as u8)?;
 		Ok(())
 	}
+
+	/// Enable the RX/TX LEDs (GPIO2 = RXLED, GPIO3 = TXLED), as dwt_setleds()
+	/// in the Qorvo driver. With `init_blink`, both LEDs blink once right away,
+	/// which shows that the LED setup itself works.
+	pub fn enable_leds(&mut self, init_blink: bool) -> Result<(), Error<SPI, CS>> {
+		// Mode 1 = LED function for GPIO2 and GPIO3
+		self.ll.gpio_mode().modify(|_, w| w.msgp2(0b001).msgp3(0b001))?;
+		// LEDs need the GPIO clock, the debounce clock and the kHz clock
+		self.ll.clk_ctrl().modify(|_, w| w.gpio_clk_en(1).gpio_dclk_en(1).lp_clk_en(1))?;
+		// Blink time 0x10 * 14 ms, as DWT_LEDS_BLINK_TIME_DEF
+		self.ll.led_ctrl().write(|w| {
+			w.blink_tim(0x10)
+				.blink_en(1)
+				.force_trig(if init_blink { 0xF } else { 0 })
+		})?;
+		if init_blink {
+			self.ll.led_ctrl().write(|w| w.blink_tim(0x10).blink_en(1))?;
+		}
+		Ok(())
+	}
 }

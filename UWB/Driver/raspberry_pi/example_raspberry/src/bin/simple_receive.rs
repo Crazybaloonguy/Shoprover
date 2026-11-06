@@ -1,7 +1,7 @@
 /*
 	A simple exemple to be used with simple_send. It will receive a frame on a loop
 */
-use rppal::gpio::{Gpio, Mode as GpioMode, PullUpDown};
+use rppal::gpio::{Gpio, Mode as GpioMode, OutputPin, PullUpDown};
 use rppal::spi::{Bus, Mode, SlaveSelect, Spi};
 
 use std::thread;
@@ -10,9 +10,35 @@ use std::time::Duration;
 use dw3000::{
 	self,
 	hl,
+	ll,
 	Config
 };
 use nb::block;
+
+/// Clears all RX event and error flags (write-1-to-clear). r_wait reports
+/// any error flag that is still set, so without this one error would be
+/// reported again on every following reception.
+fn clear_rx_status(ll: &mut ll::DW3000<Spi, OutputPin>) {
+	ll.sys_status()
+		.write(|w| {
+			w.rxprd(0b1)
+				.rxsfdd(0b1)
+				.ciadone(0b1)
+				.rxphd(0b1)
+				.rxphe(0b1)
+				.rxfr(0b1)
+				.rxfcg(0b1)
+				.rxfce(0b1)
+				.rxfsl(0b1)
+				.rxfto(0b1)
+				.ciaerr(0b1)
+				.rxovrr(0b1)
+				.rxpto(0b1)
+				.rxsto(0b1)
+				.arfe(0b1)
+		})
+		.expect("Failed to clear RX status");
+}
 
 fn main() -> ! {
     
@@ -56,6 +82,7 @@ fn main() -> ! {
 		.expect("Failed init.")
 		.config(Config::default())
 		.expect("Failed config.");
+	dw3000.enable_leds(true).expect("Failed to enable LEDs");
 
     thread::sleep(Duration::from_millis(500));
     println!("Init OK");
@@ -63,6 +90,7 @@ fn main() -> ! {
 	loop {
 		// Initiate Reception
 		let mut buffer = [0; 1024];
+		clear_rx_status(dw3000.ll());
         let mut receiving = dw3000
 			.receive(Config::default())
 			.expect("Failed configure receiver.");
@@ -70,8 +98,10 @@ fn main() -> ! {
 		// Waiting for an incomming frame
 	    let result = match block!(receiving.r_wait(&mut buffer)) {
 			Ok(t) => t,
-			Err(_e) => {
-				println!("Error");
+			Err(e) => {
+				// Frame(..) = frame received fine (CRC good), but it is not
+				// an IEEE 802.15.4 frame the ieee802154 crate can parse.
+				println!("Error: {:?}", e);
 				dw3000 = receiving.finish_receiving().expect("Failed to finish receiving");
 				continue // Start a new loop iteration
 			}

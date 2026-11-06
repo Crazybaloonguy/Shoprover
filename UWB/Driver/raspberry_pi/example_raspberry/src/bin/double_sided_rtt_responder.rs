@@ -131,6 +131,7 @@ fn main() -> ! {
 		.expect("Failed init.")
 		.config(Config::default())
 		.expect("Failed config.");
+	dw3000.enable_leds(true).expect("Failed to enable LEDs");
 
     thread::sleep(Duration::from_millis(500));
     println!("Init OK");
