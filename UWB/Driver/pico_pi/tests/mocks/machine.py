@@ -1,5 +1,5 @@
 class Pin:
-    OUT=0; IN=1; PULL_DOWN=2; IRQ_RISING=8
+    OUT=0; IN=1; PULL_UP=1; PULL_DOWN=2; IRQ_RISING=8
     def __init__(self,id,mode=None,pull=None,value=0):
         self.id=id; self._v=value; self._handler=None; self.trigger=None; self.hard=None
     def value(self,v=None):

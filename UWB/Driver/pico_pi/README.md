@@ -36,28 +36,27 @@ Datenblätter und User Manual: [docs/](docs/)
    | SPI CSn | GP17 (Pin 22) |
    | 3V3 | 3V3 (Pin 36) |
    | GND | GND (z. B. Pin 23) |
-   | RSTn, optional | GP9 (Pin 12) |
+   | RSTn | GP9 (Pin 12) beim Flexypin, GP7 (Pin 10) beim ArduPico |
    | IRQ, optional | GP2 (Pin 4) |
    | WAKEUP, optional | GP3 (Pin 5) |
+
+   Das verwendete Board in `platform/port.py` einstellen (`BOARD = "flexypin"` oder `"ardupico"`).
 
    **Jumper J1 auf dem EVB auf „Up“** stellen, damit das Modul die 3,3 V vom Pico bekommt.
 
 3. Treiber mit Thonny auf den Pico kopieren
 
-   Folgende Ordner und Dateien müssen ins Hauptverzeichnis `/` des Pico:
+   Folgende Ordner und Dateien aus `pico_pi/` müssen ins Hauptverzeichnis `/` des Pico:
 
    ```
-   Driver/decadriver/           (gemeinsamer Code)
-   Driver/shared_data/          (gemeinsamer Code)
-   Driver/config_options.py     (gemeinsamer Code)
-   Driver/pico_pi/dw_platform/  (Pico-spezifisch)
+   decadriver/
+   shared_data/
+   platform/
+   config_options.py
    ```
 
-   In Thonny **Ansicht → Dateien** öffnen (oben PC, unten Pico). Im Ordner `Driver/` die drei gemeinsamen Einträge
-   mit `Strg`+Klick markieren und mit Rechtsklick → **Hochladen nach /** hochladen, danach in `Driver/pico_pi/`
-   genauso `dw_platform/` hochladen. Auf dem Pico liegen dann alle vier nebeneinander im Hauptverzeichnis.
-
-   Note: Der Ordner hieß früher `platform/`. Liegt auf dem Pico noch ein alter `platform/`-Ordner, kann er gelöscht werden.
+   In Thonny **Ansicht → Dateien** öffnen (oben PC, unten Pico). Im Ordner `pico_pi/` die vier Einträge
+   mit `Strg`+Klick markieren und mit Rechtsklick → **Hochladen nach /** hochladen.
 
    Note: Nach Änderungen am Treiber die geänderten Dateien erneut hochladen, da der Pico seine eigene Kopie benutzt.
 
@@ -65,15 +64,15 @@ Datenblätter und User Manual: [docs/](docs/)
 
 Gewünschte `main.py` in Thonny öffnen und mit **Run** (F5) starten. Stoppen mit **Stop** oder `Strg+C`.
 
-Die Beispiele liegen gemeinsam für Pico und Raspberry Pi in `Driver/examples/`, nur die zwei
-Verkabelungstests sind Pico-spezifisch und liegen in `Driver/pico_pi/examples/`. Pfade unten relativ zu `Driver/`.
+Die Beispiele liegen in `pico_pi/examples/`. Sie passen zu den gleichnamigen Beispielen des
+Raspberry-Pi-Treibers (`raspberry_pi/`), ein Pico kann also auch mit einem Pi zusammenarbeiten.
+Pfade unten relativ zu `pico_pi/`.
 
 1. Verbindung testen
 
    ```
-   pico_pi/examples/util_pin_test/main.py                 Pins und Kabel prüfen (EVB abstecken)
-   pico_pi/examples/util_read_dev_id_spi_only/main.py     SPI prüfen, nur SPI-Leitungen nötig
-   examples/ex_00a_reading_dev_id/main.py                 DEV_ID über den Treiber lesen
+   examples/util_toggle_rstn/main.py          RSTn-Pin im 2-s-Takt schalten (mit Multimeter prüfen)
+   examples/ex_00a_reading_dev_id/main.py     DEV_ID über den Treiber lesen
    ```
 
    Erwartete Ausgabe: DEV_ID `0xdeca0302`
