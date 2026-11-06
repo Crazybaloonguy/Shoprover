@@ -32,7 +32,7 @@ import utime as time
 BOARD = "ardupico"          # "ardupico" or "flexypin"
 
 _RST_GPIO_BY_BOARD = {
-    "ardupico": 7,
+    "ardupico": 9,
     "flexypin": 9,
 }
 
@@ -100,7 +100,7 @@ class Port:
         # --- reset line: open-drain, so "asserting reset" = drive low,
         #     "released" = switch to input (let external pull-up take it high) ---
         self._rst_pin_no = self.pins["rst"]
-        self.rst = Pin(self._rst_pin_no, Pin.IN)  # released by default
+        self.rst = Pin(self._rst_pin_no, Pin.IN, Pin.PULL_UP)
 
         # --- IRQ from DW3000 ---
         # The DW3000 drives this line push-pull (active high); the pull-down
@@ -139,7 +139,7 @@ class Port:
         """
         rst = Pin(self._rst_pin_no, Pin.OUT, value=0)
         time.sleep_ms(2)
-        rst = Pin(self._rst_pin_no, Pin.IN)  # release -> pulled high externally
+        rst = Pin(self._rst_pin_no, Pin.IN, Pin.PULL_UP)
         self.rst = rst
         time.sleep_ms(2)  # allow DW3000 internal boot to complete
 
