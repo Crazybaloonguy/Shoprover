@@ -749,16 +749,17 @@ impl_register! {
 		hpdwarn,   27, 27, u8; /// Half Period Delay Warning
 		cperr,     28, 28, u8; /// Scramble Timestamp Sequence (STS) error
 		arfe,      29, 29, u8; /// Automatic Frame Filtering rejection
-		rxprej,    29, 29, u8; /// Receiver Preamble Rejection
-		vt_det,    33, 33, u8; /// Voltage or temperature variation detected
-		gpioirq,   36, 36, u8; /// GPIO interrupt
-		aes_done,  37, 37, u8; /// AES-DMA operation complete
-		aes_err,   38, 38, u8; /// AES-DMA error
-		cmd_err,   39, 39, u8; /// Command error
-		spi_ovf,   40, 40, u8; /// SPI overflow error
-		spi_unf,   41, 41, u8; /// SPI underflow error
-		spierr,    42, 42, u8; /// SPI collision error
-		cca_fail,  43, 43, u8; /// This event will be set as a result of failure of CMD_CCA_TX to transmit a packet
+		// Bits 32+ = SYS_STATUS_HI (0x48) in the C/Pico driver; same positions as SYS_ENABLE.
+		rxprej,    33, 33, u8; /// Receiver Preamble Rejection
+		vt_det,    36, 36, u8; /// Voltage or temperature variation detected
+		gpioirq,   37, 37, u8; /// GPIO interrupt
+		aes_done,  38, 38, u8; /// AES-DMA operation complete
+		aes_err,   39, 39, u8; /// AES-DMA error
+		cmd_err,   40, 40, u8; /// Command error
+		spi_ovf,   41, 41, u8; /// SPI overflow error
+		spi_unf,   42, 42, u8; /// SPI underflow error
+		spierr,    43, 43, u8; /// SPI collision error
+		cca_fail,  44, 44, u8; /// This event will be set as a result of failure of CMD_CCA_TX to transmit a packet
 	}
 	0x00, 0x4C, 4, RO, RX_FINFO(rx_finfo) { /// RX Frame Information
 		rxflen,  0,  9, u16; /// Receive Frame Length
