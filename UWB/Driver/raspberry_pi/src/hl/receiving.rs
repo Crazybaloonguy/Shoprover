@@ -183,7 +183,8 @@ where
 						.rxpto(0b1) 	// Preamble Detection Timeout
 						.rxsto(0b1) 	// Receiver SFD Timeout
 						.rxprej(0b1) 	// Receiver Preamble Rejection
-				}, 
+						.arfe(0b1) 		// Frame Filtering Rejection (was cleared by the old, wrong rxprej bit)
+				},
 			)
 			.map_err(|error| nb::Error::Other(Error::Spi(error)))?;
 
