@@ -13,7 +13,7 @@ Two layers:
                              several DW3000 at once)
   write_msg   / read_msg     IEEE 802.15.4 data frame with PAN ID, source
                              and destination address and a function code
-  parse_msg                  such a message from received frame bytes
+  build_msg / parse_msg      such a message as frame bytes, and back
 
 Message layout (write_msg / read_msg), all fields little-endian:
   0-1  frame control 0x8841 (data frame, PAN ID compression, short addresses)
@@ -107,11 +107,11 @@ def read_frame(timeout_ms=None):
             return None
 
 
-def write_msg(code: int, dest: int, src: int, payload=b"") -> bool:
+def build_msg(code: int, dest: int, src: int, payload=b"") -> bytearray:
     """
-    Send a message with function `code` from address `src` to address
-    `dest` (BROADCAST = to everyone). Returns False if the transmission
-    could not be started.
+    Frame bytes of a message with function `code` from address `src` to
+    address `dest` (BROADCAST = to everyone), for sending it yourself
+    (e.g. delayed); write_msg() sends it right away.
     """
     global _seq
     frame = bytearray(MSG_HDR_LEN + len(payload))
@@ -123,7 +123,16 @@ def write_msg(code: int, dest: int, src: int, payload=b"") -> bool:
     frame[9] = code
     frame[MSG_HDR_LEN:] = payload
     _seq = (_seq + 1) & 0xFF
-    return write_frame(frame)
+    return frame
+
+
+def write_msg(code: int, dest: int, src: int, payload=b"") -> bool:
+    """
+    Send a message with function `code` from address `src` to address
+    `dest` (BROADCAST = to everyone). Returns False if the transmission
+    could not be started.
+    """
+    return write_frame(build_msg(code, dest, src, payload))
 
 
 def parse_msg(data, my_addr=None):

@@ -5,10 +5,11 @@ Each anchor is one DW3000 on the shared SPI bus: the i-th address in
 anchor_addresses belongs to device i (the i-th CS pin in
 driver/dw_platform/port.py). On start the node initialises these devices
 and registers each anchor at the tag (handshake, see driver/handshake.py).
-After that, as a test, it prints the text messages the tag sends to the
-anchors. The DW3000 work runs in a worker thread, so the node keeps
-spinning while it waits for the tag. Progress and result go out through
-UwbPublisher.
+After that the tag ranges the anchors one after the other (DS-TWR, see
+driver/ranging.py); each anchor computes its distance to the tag, which is
+logged and published on uwb/distances. The DW3000 work runs in a worker
+thread, so the node keeps spinning while it waits for the tag. Progress
+and results go out through UwbPublisher.
 
 Parameters:
   anchor_addresses  addresses of the anchors, one per DW3000, e.g. [1, 2, 3]
@@ -63,27 +64,39 @@ class UwbNode(Node):
             self.uwb_publisher.publish_status('ready: anchors %s registered at tag 0x%04X' % (
                 ', '.join('0x%04X' % a for a in registered), tag_addr))
 
-            self._print_test_messages(anchors)
+            self._handle_events(anchors)
         except Exception as e:
-            self.get_logger().error('UWB setup failed: %s' % e)
+            self.get_logger().error('UWB failed: %s' % e)
             self.uwb_publisher.publish_status('error: %s' % e)
 
-    def _print_test_messages(self, anchors):
+    def _handle_events(self, anchors):
         """
-        Test after the handshake: listen on all anchors and print every text
-        message (the tag's "Hallo <address>", see driver/handshake.py). Each
-        is addressed to one anchor, so only that anchor prints it.
+        Listen on all anchors: log and publish every distance measured by
+        the tag's ranging, and log text messages (e.g. the tag's
+        "Hallo <address>" test, see driver/handshake.py).
         """
         from uwb_package.driver import commmunication_utils as cu
 
+        distances = [float('nan')] * len(anchors)
         while True:
-            got = uwb_driver.receive_msg(anchors, self._stop)
-            if got is None:
+            event = uwb_driver.receive_event(anchors, self._stop)
+            if event is None:
                 return
-            device, (code, src, dest, payload) = got
-            if code == cu.MSG_TEXT:
-                self.get_logger().info('anchor 0x%04X (DW3000 %d) got from tag 0x%04X: "%s"' % (
-                    anchors[device], device, src, payload.decode('utf-8', 'replace')))
+            if event[0] == 'range':
+                _, device, tag_addr, distance = event
+                if distance is None:
+                    self.get_logger().warning('anchor 0x%04X (DW3000 %d): ranging with tag 0x%04X failed'
+                                              % (anchors[device], device, tag_addr))
+                    continue
+                distances[device] = distance
+                self.uwb_publisher.publish_distances(distances)
+                self.get_logger().info('anchor 0x%04X (DW3000 %d): distance to tag 0x%04X: %.2f m'
+                                       % (anchors[device], device, tag_addr, distance))
+            else:
+                _, device, (code, src, dest, payload) = event
+                if code == cu.MSG_TEXT:
+                    self.get_logger().info('anchor 0x%04X (DW3000 %d) got from tag 0x%04X: "%s"' % (
+                        anchors[device], device, src, payload.decode('utf-8', 'replace')))
 
     def destroy_node(self):
         self._stop.set()

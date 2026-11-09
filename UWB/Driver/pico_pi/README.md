@@ -55,10 +55,11 @@ Datenblätter und User Manual: [docs/](docs/)
    config_options.py
    commmunication_utils.py
    handshake.py
+   ranging.py
    main.py
    ```
 
-   In Thonny **Ansicht → Dateien** öffnen (oben PC, unten Pico). Im Ordner `pico_pi/` die sieben Einträge
+   In Thonny **Ansicht → Dateien** öffnen (oben PC, unten Pico). Im Ordner `pico_pi/` die acht Einträge
    mit `Strg`+Klick markieren und mit Rechtsklick → **Hochladen nach /** hochladen.
 
    Note: `main.py` ist das Tag-Programm (siehe [Tag](#tag)). Der Pico startet es beim Einstecken automatisch.
@@ -72,8 +73,10 @@ Datenblätter und User Manual: [docs/](docs/)
 `main.py` ist das Programm des Tags: Es wartet, bis sich `ANCHOR_COUNT` Anchors (Standard 3) registriert
 haben, bestätigt jeden mit einem ACK und speichert ihre Adressen.
 
-Danach sendet es als Test jede Sekunde `Hallo <Adresse>` an jeden Anchor, z. B. `Hallo 0x0002` an
-Anchor 0x0002. Jede Nachricht ist nur an diesen einen Anchor adressiert (`TEST_INTERVAL_MS` in `main.py`).
+Danach misst es reihum den Abstand zu jedem Anchor (Double-Sided Two-Way Ranging, `ranging.py`): erst
+Anchor 0, dann Anchor 1, dann Anchor 2, mit `ANCHOR_GAP_MS` (1 ms) Pause dazwischen. Den Abstand berechnet
+jeweils der Anchor. Eine Runde startet alle `RANGING_INTERVAL_MS` (1000 ms); auf der Konsole steht pro Runde,
+welche Messungen geklappt haben, z. B. `ranging: 0x0001 ok, 0x0002 ok, 0x0003 ok`.
 
 Den Tag zuerst starten (Pico einstecken, oder `main.py` in Thonny öffnen und mit **Run** (F5) starten),
 danach die Anchors.

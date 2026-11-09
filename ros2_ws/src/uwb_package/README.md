@@ -2,8 +2,8 @@ uwb_package
 ---
 
 ROS 2 (Jazzy) Paket für die UWB-Anchors (Qorvo DW3000 auf einem DWM3000EVB) am Raspberry Pi 4 mit
-Ubuntu 24.04. Der Node initialisiert den DW3000, registriert die Anchors beim Tag (Handshake) und
-veröffentlicht den Zustand. Entfernungen werden noch nicht gemessen.
+Ubuntu 24.04. Der Node initialisiert den DW3000, registriert die Anchors beim Tag (Handshake), beantwortet
+danach die Abstandsmessungen des Tags und veröffentlicht Zustand und Abstände.
 
 | Datei / Ordner | Inhalt |
 |---|---|
@@ -15,6 +15,7 @@ veröffentlicht den Zustand. Entfernungen werden noch nicht gemessen.
 | `uwb_package/driver/dw_platform/` | Pi-spezifisch: Pins, SPI, Reset, IRQ |
 | `uwb_package/driver/commmunication_utils.py` | Nachrichten senden und empfangen |
 | `uwb_package/driver/handshake.py` | Registrierung der Anchors beim Tag |
+| `uwb_package/driver/ranging.py` | Abstandsmessung Tag ↔ Anchor (Double-Sided Two-Way Ranging) |
 | `uwb_package/examples/` | Testprogramme ohne ROS (Senden, Empfangen, Entfernungsmessung) |
 | `launch/uwb.launch.py` | Startet den Node mit seinen Parametern |
 
@@ -94,18 +95,22 @@ ros2 launch uwb_package uwb.launch.py
 
 Zuerst den Tag starten.
 
-Nach dem Handshake lauscht der Node als Test auf allen Anchors und gibt die Textnachrichten des Tags
-auf der Konsole aus. Jede Nachricht ist an einen Anchor adressiert, nur dieser gibt sie aus:
+Nach dem Handshake misst der Tag reihum den Abstand zu jedem Anchor (erst Anchor 0, dann 1, dann 2, je
+1 ms Pause dazwischen). Jeder Anchor bekommt dabei nur seine eigene Messung, berechnet den Abstand und
+gibt ihn aus:
 
 ```
-[uwb_node]: anchor 0x0002 (DW3000 1) got from tag 0x0100: "Hallo 0x0002"
+[uwb_node]: anchor 0x0002 (DW3000 1): distance to tag 0x0100: 2.97 m
 ```
+
+Ist eine Messung fehlgeschlagen (z. B. Antwort zu spät), erscheint eine Warnung; die nächste Runde misst neu.
 
 Zustand ansehen:
 
 ```bash
 ros2 topic echo /uwb/status
 ros2 topic echo /uwb/anchors
+ros2 topic echo /uwb/distances
 ```
 
 ### Topics
@@ -114,8 +119,12 @@ ros2 topic echo /uwb/anchors
 |---|---|---|
 | `uwb/status` | `std_msgs/String` | Zustand, z. B. `anchor 0x0001: registered at tag 0x0100`, `ready: …`, `error: …` |
 | `uwb/anchors` | `std_msgs/UInt16MultiArray` | Adressen der beim Tag registrierten Anchors |
+| `uwb/distances` | `std_msgs/Float32MultiArray` | Letzter Abstand Tag ↔ Anchor in m, ein Eintrag pro Anchor in der Reihenfolge von `uwb/anchors` (`NaN` = noch keine Messung); nach jeder neuen Messung |
 
-Beide Topics behalten den letzten Wert (transient local), auch später gestartete Nodes bekommen ihn.
+`uwb/status` und `uwb/anchors` behalten den letzten Wert (transient local), auch später gestartete Nodes bekommen ihn.
+
+Note: Die Antennen-Delays sind noch nicht kalibriert (`TX_ANT_DLY`/`RX_ANT_DLY` in `driver/ranging.py`), die
+Abstände haben deshalb einen konstanten Fehler.
 
 ### Parameter
 
