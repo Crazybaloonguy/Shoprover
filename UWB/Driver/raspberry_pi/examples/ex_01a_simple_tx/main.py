@@ -13,9 +13,9 @@ interrupts, exactly like the upstream example.
 import utime as time
 
 from dw_platform.port import port
-from decadriver import deca_device as dwt
-from decadriver import deca_regs as R
-from decadriver.deca_types import DwtConfig
+from shared.decadriver import deca_device as dwt
+from shared.decadriver import deca_regs as R
+from shared.decadriver.deca_types import DwtConfig
 from config_options import txconfig_options
 
 APP_NAME = "SIMPLE TX (Raspberry Pi) v0.1"

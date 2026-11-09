@@ -1,8 +1,8 @@
 """
 utime.py
 
-CPython stand-in for the MicroPython `utime` module, so decadriver and the
-examples (which `import utime as time`) are the same code as on the Pico.
+CPython stand-in for the MicroPython `utime` module, which decadriver and
+the examples use (`from .. import utime as time`).
 Only the functions this project uses are provided.
 
 Ticks come from a monotonic clock and never wrap here, but ticks_diff() /

@@ -8,7 +8,7 @@ these are calibration constants, not logic, so there's nothing to
 "port" beyond the numbers themselves.
 """
 
-from decadriver.deca_types import DwtTxConfig
+from shared.decadriver.deca_types import DwtTxConfig
 
 # Channel 5 (ex_01a_simple_tx's config uses chan=5)
 txconfig_options = DwtTxConfig(PGdly=0x34, power=0xFDFDFDFD, PGcount=0x0)

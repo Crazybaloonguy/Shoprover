@@ -3,23 +3,28 @@ dw_platform/port.py
 
 Raspberry Pi 4 (Ubuntu 24.04, CPython) I/O for the DWM3000EVB. Equivalent of
 the upstream project's platform/port.c -- GPIO setup, reset control, IRQ
-dispatch and SPI device handling -- and the Pi counterpart of the Pico
-driver's platform/port.py. It exposes the same `port` object API, so
-decadriver and the examples are the same code as on the Pico.
+dispatch and SPI device handling -- exposed as the `port` object that
+decadriver and the examples use.
 
 This is the ONLY file that should need editing for a different wiring.
 
-The package is called dw_platform (not "platform" as on the Pico) because
+The package is called dw_platform (not "platform" as upstream) because
 CPython already has a standard-library module named `platform`.
 
 Requirements (see README.md for details):
     /boot/firmware/config.txt:  dtoverlay=spi0-0cs   (then reboot)
     sudo apt install python3-spidev python3-lgpio
 
-Hardware/OS differences from the Pico version:
+Several DW3000 share SPI0 (SCLK/MOSI/MISO) and RSTn; each has its own CSn.
+select() picks the device the following SPI transactions go to; together
+with deca_device.dwt_setlocaldataptr() (same index) it switches the whole
+driver to that device. Device 0 is selected at start, so single-device
+code needs neither.
+
+Hardware/OS notes:
   - SPI goes through the kernel's spidev driver (/dev/spidev0.0). Chip
     select is a plain GPIO driven by this driver around every transaction,
-    as on the Pico (see "cs" in PINS for why not the kernel's CE0).
+    (see "cs" in PINS for why not the kernel's CE0/CE1).
   - GPIO goes through lgpio (/dev/gpiochip0). IRQ edges are delivered on
     lgpio's callback *thread*, not as a MicroPython soft IRQ, so a
     re-entrant lock (`port.lock`) keeps SPI transactions atomic and stops
@@ -38,34 +43,36 @@ os.environ.setdefault("LG_WD", tempfile.gettempdir())
 
 import lgpio
 import spidev
-import utime as time
+from .. import utime as time
 
 # ---------------------------------------------------------------------------
 # Pin assignment (BCM GPIO numbers) -- edit this dict if your wiring differs.
 #
 #   DWM3000EVB    Pi 4 header
-#   SPI CLK   ->  GPIO11 (pin 23)   SPI0 SCLK
-#   SPI MISO  ->  GPIO9  (pin 21)   SPI0 MISO
-#   SPI MOSI  ->  GPIO10 (pin 19)   SPI0 MOSI
-#   SPI CSn   ->  GPIO8  (pin 24)   driven by this driver (see "cs" below)
-#   RSTn      ->  GPIO25 (pin 22)
-#   IRQ       ->  GPIO24 (pin 18)   optional, only ex_03d needs it
-#   WAKEUP    ->  GPIO23 (pin 16)   optional
+#   SPI CLK   ->  GPIO11 (pin 23)   SPI0 SCLK, all devices
+#   SPI MISO  ->  GPIO9  (pin 21)   SPI0 MISO, all devices
+#   SPI MOSI  ->  GPIO10 (pin 19)   SPI0 MOSI, all devices
+#   SPI CSn   ->  GPIO8  (pin 24)   device 0, driven by this driver (see "cs" below)
+#                 GPIO7  (pin 26)   device 1
+#                 GPIO16 (pin 36)   device 2
+#   RSTn      ->  GPIO25 (pin 22)   all devices
+#   IRQ, WAKEUP: not wired (the driver polls the status register). If wired,
+#   only for a single device: the IRQ handler does not switch devices.
 #
 # Chip select: on some kernels (seen on Ubuntu) the SPI driver does not
 # release CE0 between back-to-back transfers, so the DW3000 sees one endless
 # transfer. This driver therefore raises/lowers CSn itself around every
-# transfer, as on the Pico. GPIO8 is only free for that with
-# dtoverlay=spi0-0cs (the SPI driver then claims no CS pin at all).
+# transfer. GPIO8 and GPIO7 (CE0/CE1) are only free for
+# that with dtoverlay=spi0-0cs (the SPI driver then claims no CS pin at all).
 # ---------------------------------------------------------------------------
 PINS = {
-    "spi_bus":  0,      # /dev/spidev<bus>.<cs>
+    "spi_bus":  0,          # /dev/spidev<bus>.<cs>
     "spi_cs":   0,
-    "cs":       8,      # DW3000 CSn, driven by hand
-    "gpiochip": 0,      # Pi 4 header GPIOs are on /dev/gpiochip0
-    "rst":      25,     # DW3000 RSTn -- open-drain (by hand), active low
-    "irq":      24,     # DW3000 IRQ -> host (None = not wired)
-    "wakeup":   23,     # DW3000 WAKEUP (None = not wired)
+    "cs":       [8, 7, 16], # DW3000 CSn per device (index = device), driven by hand
+    "gpiochip": 0,          # Pi 4 header GPIOs are on /dev/gpiochip0
+    "rst":      25,         # DW3000 RSTn, shared -- open-drain (by hand), active low
+    "irq":      None,       # DW3000 IRQ -> host (None = not wired)
+    "wakeup":   None,       # DW3000 WAKEUP (None = not wired)
 }
 
 # SPI clock speeds. The DW3000 requires a slow SPI clock (<3 MHz) until
@@ -81,7 +88,7 @@ _ISR_MAX_PASSES = 16
 
 class Line:
     """
-    One claimed GPIO, with the machine.Pin-style value() the Pico code uses.
+    One claimed GPIO, with a machine.Pin-style value().
     """
 
     def __init__(self, handle, gpio):
@@ -96,7 +103,7 @@ class Line:
 
 class Port:
     """
-    Owns the SPI device and GPIO lines for one DW3000 device.
+    Owns the SPI device and GPIO lines for the DW3000 devices on the bus.
     Equivalent of the global state set up by platform/port.c's port_init()
     style functions in the upstream project.
     """
@@ -117,15 +124,20 @@ class Port:
 
         self._h = lgpio.gpiochip_open(self.pins["gpiochip"])
 
-        # --- chip select by hand (active low, idle high), see PINS ---
-        try:
-            lgpio.gpio_claim_output(self._h, self.pins["cs"], 1)
-        except lgpio.error as e:
-            raise RuntimeError("CS GPIO%d not usable (%s) -- is dtoverlay=spi0-0cs set in "
-                               "/boot/firmware/config.txt? (see README.md)" % (self.pins["cs"], e))
-        self.cs = Line(self._h, self.pins["cs"])
+        # --- chip select by hand (active low, idle high), one per device, see
+        #     PINS. All idle high, so only the selected device drives MISO. ---
+        self.cs_lines = []
+        for gpio in self.pins["cs"]:
+            try:
+                lgpio.gpio_claim_output(self._h, gpio, 1)
+            except lgpio.error as e:
+                raise RuntimeError("CS GPIO%d not usable (%s) -- is dtoverlay=spi0-0cs set in "
+                                   "/boot/firmware/config.txt? (see README.md)" % (gpio, e))
+            self.cs_lines.append(Line(self._h, gpio))
+        self.selected = 0
+        self.cs = self.cs_lines[0]      # CSn of the selected device, used by deca_spi
 
-        # --- reset line: open-drain behaviour done by hand, as on the Pico:
+        # --- reset line: open-drain behaviour done by hand:
         #     "asserting reset" = output low, "released" = input. The Pi's
         #     pull-up keeps the line clearly high when released: the DW3000's
         #     own pull-up is weak, and a pull-down (the default on GPIO25
@@ -155,6 +167,25 @@ class Port:
             self.wakeup = Line(self._h, self.pins["wakeup"])
 
     # -----------------------------------------------------------------
+    # Device selection
+    # -----------------------------------------------------------------
+    @property
+    def device_count(self):
+        return len(self.cs_lines)
+
+    def select(self, index):
+        """
+        Send the following SPI transactions to device `index` (its CSn).
+        Call deca_device.dwt_setlocaldataptr(index) as well, so the driver
+        uses that device's local data.
+        """
+        if not 0 <= index < len(self.cs_lines):
+            raise ValueError("no DW3000 device %d (PINS has %d CS pins)" % (index, len(self.cs_lines)))
+        with self.lock:     # never switch in the middle of a transaction
+            self.selected = index
+            self.cs = self.cs_lines[index]
+
+    # -----------------------------------------------------------------
     # SPI speed control -- decadriver calls this after dwt_initialise()
     # -----------------------------------------------------------------
     def spi_set_rate_low(self):
@@ -170,6 +201,7 @@ class Port:
         """
         Hard-reset the DW3000. Open-drain drive low, hold briefly, release,
         then wait for the IC to complete its internal boot/OTP-load sequence.
+        RSTn is shared, so this resets all devices.
         """
         rst = self.pins["rst"]
         lgpio.gpio_free(self._h, rst)
@@ -249,8 +281,7 @@ class Port:
         self._h = None
 
 
-# Module-level singleton, mirroring the single-device global state pattern
-# used throughout the upstream C examples (one DW3000 per host in all
-# ported examples so far).
+# Module-level singleton, mirroring the global state pattern of the upstream
+# C examples; it serves all DW3000 devices on the bus (see select()).
 port = Port()
 atexit.register(port.close)

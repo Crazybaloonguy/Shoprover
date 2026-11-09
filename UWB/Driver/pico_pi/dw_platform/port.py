@@ -1,5 +1,5 @@
 """
-platform/port.py
+dw_platform/port.py
 
 RP2040 (Pico) + ArduPico carrier board-specific I/O for the DWS3000 shield.
 MicroPython equivalent of the upstream project's platform/port.c —

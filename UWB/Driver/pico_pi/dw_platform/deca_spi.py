@@ -1,10 +1,10 @@
 """
 dw_platform/deca_spi.py
 
-Low-level SPI primitives for the DW3000, Raspberry Pi (spidev) equivalent of
+Low-level SPI primitives for the DW3000, MicroPython equivalent of
 platform/deca_spi.c's openspi()/writetospi()/readfromspi(). decadriver
 (target-independent) calls these two functions; only this file and
-port.py know about real hardware.
+port.py know about real hardware pins.
 
 The DW3000 SPI protocol is: assert CS, clock out a 1-3 byte header that
 encodes register-file/offset/R-W, then clock the data body in the same
@@ -13,11 +13,6 @@ pre-built header buffer -- header construction (which varies by register
 file/offset per the DW3000 SPI spec) lives in decadriver/deca_device.py,
 matching the upstream project's split between "build the header" (target
 independent) and "shove bytes over the wire" (target specific).
-
-Header and body go out as one spidev xfer2() call, with CSn (a plain GPIO,
-see PINS in port.py) lowered before and raised after it. Each transaction
-holds port.lock, so the IRQ callback thread cannot run dwt_isr in the
-middle of it.
 """
 
 from dw_platform.port import port
@@ -28,12 +23,17 @@ def writetospi(header: bytes, body: bytes) -> None:
     Write `header` immediately followed by `body` in a single SPI
     transaction (CS held low across both).
     """
-    with port.lock:
-        port.cs.value(0)
-        try:
-            port.spi.xfer2(list(header) + list(body or b""))
-        finally:
-            port.cs.value(1)
+    port.spi_busy = True
+    port.cs.value(0)
+    try:
+        port.spi.write(header)
+        if body:
+            port.spi.write(body)
+    finally:
+        port.cs.value(1)
+        port.spi_busy = False
+    if port.isr_pending:    # an interrupt arrived mid-transaction; service it now
+        port.service_irq()
 
 
 def readfromspi(header: bytes, readlength: int) -> bytes:
@@ -41,10 +41,15 @@ def readfromspi(header: bytes, readlength: int) -> bytes:
     Write `header`, then clock in `readlength` bytes, CS held low across
     both. Returns the bytes read (NOT including the header).
     """
-    with port.lock:
-        port.cs.value(0)
-        try:
-            rx = port.spi.xfer2(list(header) + [0] * readlength)
-        finally:
-            port.cs.value(1)
-    return bytes(rx[len(header):])
+    port.spi_busy = True
+    port.cs.value(0)
+    try:
+        port.spi.write(header)
+        buf = bytearray(readlength)
+        port.spi.readinto(buf)
+    finally:
+        port.cs.value(1)
+        port.spi_busy = False
+    if port.isr_pending:    # an interrupt arrived mid-transaction; service it now
+        port.service_irq()
+    return bytes(buf)

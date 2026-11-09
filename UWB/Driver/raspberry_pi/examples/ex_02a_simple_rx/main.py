@@ -10,9 +10,9 @@ second board (same channel/preamble/PRF configuration).
 import utime as time
 
 from dw_platform.port import port
-from decadriver import deca_device as dwt
-from decadriver import deca_regs as R
-from decadriver.deca_types import DwtConfig
+from shared.decadriver import deca_device as dwt
+from shared.decadriver import deca_regs as R
+from shared.decadriver.deca_types import DwtConfig
 from shared_data.shared_defines import FRAME_LEN_MAX
 
 APP_NAME = "SIMPLE RX (Raspberry Pi) v0.1"

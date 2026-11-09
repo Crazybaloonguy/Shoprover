@@ -23,9 +23,9 @@ MicroPython points specific to this side:
 import utime as time
 
 from dw_platform.port import port
-from decadriver import deca_device as dwt
-from decadriver import deca_regs as R
-from decadriver.deca_types import DwtConfig
+from shared.decadriver import deca_device as dwt
+from shared.decadriver import deca_regs as R
+from shared.decadriver.deca_types import DwtConfig
 from config_options import txconfig_options
 from shared_data.shared_defines import FRAME_LEN_MAX_EX, UUS_TO_DWT_TIME, SPEED_OF_LIGHT
 from shared_data.shared_functions import (get_tx_timestamp_u64, get_rx_timestamp_u64,

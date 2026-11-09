@@ -9,7 +9,7 @@ second board (same channel/preamble/PRF configuration).
 
 import utime as time
 
-from platform.port import port
+from dw_platform.port import port
 from decadriver import deca_device as dwt
 from decadriver import deca_regs as R
 from decadriver.deca_types import DwtConfig

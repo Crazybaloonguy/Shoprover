@@ -25,17 +25,18 @@ larger, separate chunks of deca_device.c -- port them the same way
 (against the real source) when the next example needs them.
 """
 
-import utime as time
+from .. import utime as time
 
-from dw_platform.deca_spi import writetospi, readfromspi
-from decadriver import deca_regs as R
-from decadriver.deca_types import DwtCbData, DwtRxDiag, DwtDeviceEntCnts
+from ..dw_platform.deca_spi import writetospi, readfromspi
+from . import deca_regs as R
+from .deca_types import DwtCbData, DwtRxDiag, DwtDeviceEntCnts
 
 
 # ===========================================================================
 # Local device state -- Python equivalent of the upstream's
 # `static dwt_local_data_t DW3000local[...]` / `pdw3000local`.
-# Single-device only (matches every example ported so far).
+# One entry per DW3000; dwt_setlocaldataptr() picks the one `local` refers
+# to (the SPI side picks the device with port.select()).
 # ===========================================================================
 class _LocalData:
     def __init__(self):
@@ -65,7 +66,22 @@ class _LocalData:
         self.cbData = DwtCbData()
 
 
-local = _LocalData()
+_locals = [_LocalData()]
+local = _locals[0]
+
+
+def dwt_setlocaldataptr(index: int) -> int:
+    """
+    Select the local data of DW3000 number `index` for all following driver
+    calls (upstream dwt_setlocaldataptr). Each DW3000 keeps its own OTP and
+    calibration values read by dwt_initialise(), so this must match the
+    device selected for SPI with port.select().
+    """
+    global local
+    while len(_locals) <= index:
+        _locals.append(_LocalData())
+    local = _locals[index]
+    return R.DWT_SUCCESS
 
 
 # ===========================================================================

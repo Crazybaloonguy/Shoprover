@@ -40,7 +40,7 @@ Datenblätter und User Manual: [docs/](docs/)
    | IRQ, optional | GP2 (Pin 4) |
    | WAKEUP, optional | GP3 (Pin 5) |
 
-   Das verwendete Board in `platform/port.py` einstellen (`BOARD = "flexypin"` oder `"ardupico"`).
+   Das verwendete Board in `dw_platform/port.py` einstellen (`BOARD = "flexypin"` oder `"ardupico"`).
 
    **Jumper J1 auf dem EVB auf „Up“** stellen, damit das Modul die 3,3 V vom Pico bekommt.
 
@@ -50,50 +50,51 @@ Datenblätter und User Manual: [docs/](docs/)
 
    ```
    decadriver/
+   dw_platform/
    shared_data/
-   platform/
    config_options.py
+   commmunication_utils.py
+   handshake.py
+   main.py
    ```
 
-   In Thonny **Ansicht → Dateien** öffnen (oben PC, unten Pico). Im Ordner `pico_pi/` die vier Einträge
+   In Thonny **Ansicht → Dateien** öffnen (oben PC, unten Pico). Im Ordner `pico_pi/` die sieben Einträge
    mit `Strg`+Klick markieren und mit Rechtsklick → **Hochladen nach /** hochladen.
+
+   Note: `main.py` ist das Tag-Programm (siehe [Tag](#tag)). Der Pico startet es beim Einstecken automatisch.
+
+   Note: Der Ordner hieß früher `platform/`. Liegt auf dem Pico noch ein alter `platform/`-Ordner, kann er gelöscht werden.
 
    Note: Nach Änderungen am Treiber die geänderten Dateien erneut hochladen, da der Pico seine eigene Kopie benutzt.
 
+# Tag
+
+`main.py` ist das Programm des Tags: Es wartet, bis sich `ANCHOR_COUNT` Anchors (Standard 3) registriert
+haben, bestätigt jeden mit einem ACK und speichert ihre Adressen.
+
+Danach sendet es als Test jede Sekunde `Hallo <Adresse>` an jeden Anchor, z. B. `Hallo 0x0002` an
+Anchor 0x0002. Jede Nachricht ist nur an diesen einen Anchor adressiert (`TEST_INTERVAL_MS` in `main.py`).
+
+Den Tag zuerst starten (Pico einstecken, oder `main.py` in Thonny öffnen und mit **Run** (F5) starten),
+danach die Anchors.
+
 # Beispiele
 
-Gewünschte `main.py` in Thonny öffnen und mit **Run** (F5) starten. Stoppen mit **Stop** oder `Strg+C`.
+Die Beispiele zeigen einzelne Funktionen des Treibers. Gewünschte `main.py` in Thonny öffnen und mit
+**Run** (F5) starten. Stoppen mit **Stop** oder `Strg+C`.
 
-Die Beispiele liegen in `pico_pi/examples/`. Sie passen zu den gleichnamigen Beispielen des
-Raspberry-Pi-Treibers (`raspberry_pi/`), ein Pico kann also auch mit einem Pi zusammenarbeiten.
-Pfade unten relativ zu `pico_pi/`.
+Die Beispiele liegen in `pico_pi/examples/`. Pfade unten relativ zu `pico_pi/`.
 
-1. Verbindung testen
-
-   ```
-   examples/util_toggle_rstn/main.py          RSTn-Pin im 2-s-Takt schalten (mit Multimeter prüfen)
-   examples/ex_00a_reading_dev_id/main.py     DEV_ID über den Treiber lesen
-   ```
-
-   Erwartete Ausgabe: DEV_ID `0xdeca0302`
-
-2. Senden und Empfangen (muss noch getestet werden)
+1. Senden und Empfangen
 
    ```
    Board 1:  examples/ex_02a_simple_rx/main.py
    Board 2:  examples/ex_01a_simple_tx/main.py
    ```
 
-3. Entfernungsmessung (muss noch getestet werden)
+2. Entfernungsmessung (Double-Sided)
 
    Den Responder immer zuerst starten.
-
-   ```
-   Board 1:  examples/ex_06b_ss_twr_responder/main.py
-   Board 2:  examples/ex_06a_ss_twr_initiator/main.py
-   ```
-
-   oder (Double-Sided)
 
    ```
    Board 1:  examples/ex_05b_ds_twr_responder/main.py

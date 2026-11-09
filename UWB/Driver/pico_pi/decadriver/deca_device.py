@@ -27,7 +27,7 @@ larger, separate chunks of deca_device.c -- port them the same way
 
 import utime as time
 
-from platform.deca_spi import writetospi, readfromspi
+from dw_platform.deca_spi import writetospi, readfromspi
 from decadriver import deca_regs as R
 from decadriver.deca_types import DwtCbData, DwtRxDiag, DwtDeviceEntCnts
 

@@ -10,7 +10,7 @@ Timestamps are 40-bit values. In the message timestamp fields the least
 significant byte is at the lowest address, and only the low 32 bits are sent.
 """
 
-from decadriver import deca_device as dwt
+from shared.decadriver import deca_device as dwt
 from shared_data.shared_defines import RESP_MSG_TS_LEN, FINAL_MSG_TS_LEN
 
 
