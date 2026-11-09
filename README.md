@@ -14,6 +14,15 @@ Der Roboter folgt autonom der ihm zugewiesenen Person, transportiert Einkäufe u
 - Marcel Kraft 
 - Alexej Betz 
 
+## Repository-Übersicht
+
+- [`docs/`](docs/): Dokumentation ([Build- und Flash-Anleitung](docs/Build.md), [Komponentenliste](docs/PartList.md), [Einkaufsliste](docs/ShoppingList.md), [Systemarchitektur](docs/SystemArchitektur.md), [UWB-Konzept](docs/UWB.md), [Raspberry Pi Setup](docs/RaspberryPi.md)).
+- [`hoverboard-firmware-hack-FOC/`](hoverboard-firmware-hack-FOC/): Hoverboard-Firmware basierend auf [EFeru/hoverboard-firmware-hack-FOC](https://github.com/EFeru/hoverboard-firmware-hack-FOC). Konfiguriert für serielle Steuerung via UART (`VARIANT_USART`, 115200 Baud).
+- [`ros2_ws/`](ros2_ws/): ROS 2 Workspace mit `controller_package`, `motor_package` und `rplidar_ros`.
+- [`UWB/`](UWB/): Treiber und Testprogramme für Qorvo DWM3000 UWB-Module (Raspberry Pi & Pi Pico).
+
+Detaillierte Anweisungen zum Flashen der Firmware, Kompilieren des ROS 2 Workspaces und zur Verkabelung sind in [docs/Build.md](docs/Build.md) dokumentiert.
+
 ## Hardware
 
 - Raspberry Pi (Zentral Steuerung, Sensorverarbeitung und Navigationslogik.)
