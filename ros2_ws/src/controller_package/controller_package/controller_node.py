@@ -3,6 +3,7 @@ import math
 import rclpy
 from rclpy.node import Node
 
+from std_msgs.msg import String
 from sensor_msgs.msg import LaserScan
 
 class ControllerNode(Node):
@@ -10,12 +11,22 @@ class ControllerNode(Node):
     def __init__(self):
         super().__init__('controller_node')
         print("Controller Node Initialized")
-        self.subscription = self.create_subscription(
+        # RPLIDAR subscription
+        self.scan_subscription = self.create_subscription(
             LaserScan,
             '/scan', # Lidar scan
             self.rplidar_callback,
             10)
-        self.subscription  # prevent unused variable warning
+        self.scan_subscription  # prevent unused variable warning
+        self.uwb_subscriber = self.create_subscription(
+            String,
+            '/uwb',
+            self.uwb_callback,
+            10)
+        self.uwb_subscriber  # prevent unused variable warning
+
+    def uwb_callback(self, msg):
+        self.get_logger().info(f'UWB data received: {msg.data}')
 
     def rplidar_callback(self, msg):
         obstacles = [
