@@ -12,3 +12,5 @@ MDK-ARM/Objects/
 MDK-ARM/RTE/
 MDK-ARM/*.uvguix.*
 build/
+__pycache__/
+*.py[cod]
