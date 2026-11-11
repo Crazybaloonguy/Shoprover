@@ -21,6 +21,7 @@ def generate_launch_description():
                 # driver/dw_platform/port.py (GPIO8, GPIO7, GPIO16). The tag
                 # must wait for as many anchors.
                 'anchor_addresses': [1, 2, 3],
+                'anchor_positions': [0.45, 0.0,   -0.5, 0.5,   -0.5, -0.5],   # x0,y0, x1,y1, x2,y2
             }],
         ),
     ])

@@ -110,7 +110,7 @@ Zustand ansehen:
 ```bash
 ros2 topic echo /uwb/status
 ros2 topic echo /uwb/anchors
-ros2 topic echo /uwb/distances
+ros2 topic echo /uwb/goal_coordinate
 ```
 
 ### Topics
@@ -119,7 +119,7 @@ ros2 topic echo /uwb/distances
 |---|---|---|
 | `uwb/status` | `std_msgs/String` | Zustand, z. B. `anchor 0x0001: registered at tag 0x0100`, `ready: …`, `error: …` |
 | `uwb/anchors` | `std_msgs/UInt16MultiArray` | Adressen der beim Tag registrierten Anchors |
-| `uwb/distances` | `std_msgs/Float32MultiArray` | Letzter Abstand Tag ↔ Anchor in m, ein Eintrag pro Anchor in der Reihenfolge von `uwb/anchors` (`NaN` = noch keine Messung); nach jeder neuen Messung |
+| `uwb/goal_coordinate` | `geometry_msgs/PointStamped` | Position des Tags in m relativ zum Fahrzeug (`frame_id = base_link`, `point.x` / `point.y`, `z = 0`); einmal pro Runde, sobald jeder Anchor einen neuen Abstand hat |
 
 `uwb/status` und `uwb/anchors` behalten den letzten Wert (transient local), auch später gestartete Nodes bekommen ihn.
 
@@ -131,6 +131,7 @@ Abstände haben deshalb einen konstanten Fehler.
 | Parameter | Standard | Bedeutung |
 |---|---|---|
 | `anchor_addresses` | `[1, 2, 3]` (Launch-File) | Adressen der Anchors, eine pro Modul in der Reihenfolge der CSn-Pins: die erste gehört zu Modul 0 (GPIO8), die zweite zu Modul 1 (GPIO7), die dritte zu Modul 2 (GPIO16) |
+| `anchor_positions` | siehe Launch-File | Position jedes Anchors in m relativ zum Fahrzeug als flache Liste `[x0, y0, x1, y1, …]`, gleiche Reihenfolge wie `anchor_addresses`; alle Werte als Float (`0.0`, nicht `0`) |
 
 Note: Der Tag muss auf genau so viele Anchors warten, wie `anchor_addresses` Einträge hat.
 
