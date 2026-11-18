@@ -35,10 +35,23 @@ Der Shoprover besteht aus drei miteinander kommunizierenden Recheneinheiten:
 flowchart TD
     subgraph Rover ["Shoprover (Fahrzeug)"]
         subgraph RPi ["Raspberry Pi 4 (Ubuntu 24.04 + ROS 2 Jazzy)"]
-            LIDAR_NODE["rplidar_ros (/scan)"]
-            CTRL_NODE["controller_package (controller_node)"]
-            MOTOR_NODE["motor_package (motor_node + hover_serial.py)"]
-            UWB_DRV["UWB SPI-Treiber (DWM3000)"]
+            LIDAR_NODE["rplidar_ros"]
+            UWB_DRV["UWB SPI-Treiber / node (DWM3000)"]
+            TELEOP["joy_node + teleop_twist_joy"]
+
+            subgraph HB_CTRL ["hoverboard_ros2_control"]
+                RSP["robot_state_publisher (URDF)"]
+                R2C["ros2_control_node + diff_drive_controller"]
+            end
+
+            SLAM["slam_toolbox (online_async)"]
+
+            subgraph NAV2 ["Nav2 (nav2_bringup: navigation_launch.py)"]
+                PLANNER["planner_server + global_costmap"]
+                CONTROLLER["controller_server (MPPI) + local_costmap"]
+                SMOOTH["velocity_smoother + collision_monitor"]
+                PLANNER --> CONTROLLER --> SMOOTH
+            end
         end
 
         subgraph Mainboard ["Hoverboard Mainboard (STM32F103)"]
@@ -49,13 +62,30 @@ flowchart TD
 
         LIDAR_HW["RPLIDAR (USB)"] --> LIDAR_NODE
         UWB_REC["3x UWB-Receiver (SPI)"] --> UWB_DRV
-        UWB_DRV --> CTRL_NODE
-        LIDAR_NODE --> CTRL_NODE
-        CTRL_NODE --> MOTOR_NODE
-        MOTOR_NODE -- "UART (115200 Baud)" --> FOC
+        PS4["PS4-Controller"] --> TELEOP
+
+        LIDAR_NODE -- "/scan" --> SLAM
+        LIDAR_NODE -- "/scan" --> NAV2
+        R2C -- "TF odom → base_link" --> SLAM
+        RSP -- "TF base_link → laser" --> SLAM
+        SLAM -- "/map + TF map → odom" --> NAV2
+        R2C -- "/hoverboard_base_controller/odom" --> NAV2
+
+        UWB_DRV -. "Personenposition als Ziel (geplant)" .-> NAV2
+        SMOOTH -- "/cmd_vel (TwistStamped)" --> R2C
+        TELEOP -- "/cmd_vel (TwistStamped)" --> R2C
+
+        R2C -- "UART (115200 Baud)" --> FOC
         FOC --> M1
         FOC --> M2
     end
+
+    subgraph PC ["Laptop / PC"]
+        RVIZ["RViz (2D Goal Pose)"]
+    end
+
+    RVIZ -. "/goal_pose (WLAN)" .-> NAV2
+    SLAM -. "/map" .-> RVIZ
 
     subgraph Person ["Person (Getragener UWB-Tag)"]
         PICO["Raspberry Pi Pico 2 W (MicroPython)"]
@@ -64,6 +94,7 @@ flowchart TD
     end
 
     UWB_TAG -. "UWB Funk (ToF)" .-> UWB_REC
+
 ```
 
 | Komponente | Verzeichnis im Repository | Ziel-Hardware | Funktion |
