@@ -22,6 +22,9 @@ def generate_launch_description():
                 # must wait for as many anchors.
                 'anchor_addresses': [1, 2, 3],
                 'anchor_positions': [0.45, 0.0,   -0.5, 0.5,   -0.5, -0.5],   # x0,y0, x1,y1, x2,y2
+                # Goal for Nav2 (follow_point.xml): fixed frame and topic.
+                'goal_frame': 'odom',
+                'goal_topic': 'goal_update',
             }],
         ),
     ])

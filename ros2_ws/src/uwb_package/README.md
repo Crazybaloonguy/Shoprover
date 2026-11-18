@@ -110,7 +110,7 @@ Zustand ansehen:
 ```bash
 ros2 topic echo /uwb/status
 ros2 topic echo /uwb/anchors
-ros2 topic echo /uwb/goal_coordinate
+ros2 topic echo /goal_update
 ```
 
 ### Topics
@@ -119,7 +119,7 @@ ros2 topic echo /uwb/goal_coordinate
 |---|---|---|
 | `uwb/status` | `std_msgs/String` | Zustand, z. B. `anchor 0x0001: registered at tag 0x0100`, `ready: …`, `error: …` |
 | `uwb/anchors` | `std_msgs/UInt16MultiArray` | Adressen der beim Tag registrierten Anchors |
-| `uwb/goal_coordinate` | `geometry_msgs/PointStamped` | Position des Tags in m relativ zum Fahrzeug (`frame_id = base_link`, `point.x` / `point.y`, `z = 0`); einmal pro Runde, sobald jeder Anchor einen neuen Abstand hat |
+| `goal_update` | `geometry_msgs/PoseStamped` | Position des Tags (nach jeweils 10 Positionen Kalman-gefiltert, Orientierung zeigt vom Fahrzeug zum Tag), per TF in den festen Frame `goal_frame` (Standard `odom`) umgerechnet; Ziel für Nav2 (siehe unten). Fehlt die Transformation, wird nichts gesendet und eine Warnung ausgegeben |
 
 `uwb/status` und `uwb/anchors` behalten den letzten Wert (transient local), auch später gestartete Nodes bekommen ihn.
 
@@ -131,6 +131,8 @@ Abstände haben deshalb einen konstanten Fehler.
 | Parameter | Standard | Bedeutung |
 |---|---|---|
 | `anchor_addresses` | `[1, 2, 3]` (Launch-File) | Adressen der Anchors, eine pro Modul in der Reihenfolge der CSn-Pins: die erste gehört zu Modul 0 (GPIO8), die zweite zu Modul 1 (GPIO7), die dritte zu Modul 2 (GPIO16) |
+| `goal_frame` | `odom` | fester Frame, in dem das Ziel für Nav2 gesendet wird (`odom` oder `map`) |
+| `goal_topic` | `goal_update` | Topic des Ziels für Nav2 |
 | `anchor_positions` | siehe Launch-File | Position jedes Anchors in m relativ zum Fahrzeug als flache Liste `[x0, y0, x1, y1, …]`, gleiche Reihenfolge wie `anchor_addresses`; alle Werte als Float (`0.0`, nicht `0`) |
 
 Note: Der Tag muss auf genau so viele Anchors warten, wie `anchor_addresses` Einträge hat.
@@ -149,3 +151,22 @@ python3 -m uwb_package.examples.ex_01a_simple_tx            # sendet, Gegenseite
 python3 -m uwb_package.examples.ex_05b_ds_twr_responder     # Responder, Gegenseite: Initiator
 python3 -m uwb_package.examples.ex_05a_ds_twr_initiator     # Initiator, Gegenseite: Responder
 ```
+
+---
+## Nav2: dem Tag folgen
+
+Der Node sendet das Ziel auf `goal_update`. Darauf hört der `GoalUpdater` im Behavior Tree
+`follow_point.xml` von Nav2: Er ersetzt das Ziel der laufenden Navigation durch den neuesten Punkt, ohne
+die Navigation neu zu starten. Der Roboter plant regelmäßig neu (`RateController`, Standard 1 Hz) und
+hält etwa 1 m vor dem Tag an (`TruncatePath`). Die Navigation läuft weiter, bis sie abgebrochen wird.
+
+Die Navigation einmal mit diesem Behavior Tree starten:
+
+```bash
+ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose   "{pose: {header: {frame_id: odom}, pose: {orientation: {w: 1.0}}},
+    behavior_tree: '/opt/ros/$ROS_DISTRO/share/nav2_bt_navigator/behavior_trees/follow_point.xml'}"
+```
+
+Note: `goal_frame` muss ein Frame sein, in den Nav2 transformieren kann (TF `goal_frame` -> `base_link`
+muss existieren), sonst sendet der Node kein Ziel.
+

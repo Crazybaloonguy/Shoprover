@@ -9,7 +9,7 @@ After that the tag ranges the anchors one after the other (DS-TWR, see
 driver/ranging.py); each anchor computes its distance to the tag. Once
 every anchor has a new distance, the position of the tag (x/y relative to
 the vehicle) is computed by trilateration and published on
-uwb/goal_coordinate. The DW3000 work runs in a worker
+goal_update (goal for Nav2). The DW3000 work runs in a worker
 thread, so the node keeps spinning while it waits for the tag. Progress
 and results go out through UwbPublisher.
 
@@ -18,6 +18,9 @@ Parameters:
                     (default [1])
   anchor_positions  x/y of each anchor in m relative to the vehicle, flat:
                     [x0, y0, x1, y1, ...], same order as anchor_addresses
+  goal_frame        fixed frame the goal for Nav2 is published in (default odom)
+  goal_topic        topic of the goal for Nav2 (default goal_update, the topic
+                    the GoalUpdater in Nav2's follow_point.xml listens on)
 """
 
 import math
@@ -41,8 +44,12 @@ class UwbNode(Node):
         super().__init__('uwb_node')
         self.declare_parameter('anchor_addresses', [1])
         self.declare_parameter('anchor_positions', [0.0, 0.0])
+        self.declare_parameter('goal_frame', 'odom')
+        self.declare_parameter('goal_topic', 'goal_update')
 
-        self.uwb_publisher = UwbPublisher(self)
+        self.uwb_publisher = UwbPublisher(self,
+                                          goal_frame=self.get_parameter('goal_frame').value,
+                                          goal_topic=self.get_parameter('goal_topic').value)
         self._stop = threading.Event()
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
@@ -50,24 +57,23 @@ class UwbNode(Node):
     def _run(self):
         anchors = list(self.get_parameter('anchor_addresses').value)
         if not anchors:
-            self.uwb_publisher.publish_status('error: parameter anchor_addresses is empty')
+            print('error: anchor_addresses is empty')
             return
         flat = list(self.get_parameter('anchor_positions').value)
         if len(flat) != 2 * len(anchors):
-            self.uwb_publisher.publish_status(
-            'error: anchor_positions needs %d values (x, y per anchor), got %d'
-            % (2 * len(anchors), len(flat)))
+            print('error: anchor_positions needs %d values (x, y per anchor), got %d'
+                  % (2 * len(anchors), len(flat)))
             return
         self.positions = [(flat[i], flat[i + 1]) for i in range(0, len(flat), 2)]
         try:
-            self.uwb_publisher.publish_status('initialising %d DW3000' % len(anchors))
+            print('UWB: initialising %d anchors at addresses %s' % (len(anchors), ', '.join('0x%04X' % a for a in anchors)))
             uwb_driver.init_dw3000(len(anchors))
             from uwb_package.driver.handshake import register_with_tag
 
             registered = [] # make sure the tag is running first, otherwise the anchors will never register
             for device, addr in enumerate(anchors):
                 uwb_driver.select_device(device)
-                self.uwb_publisher.publish_status('anchor 0x%04X: registering at the tag' % addr)
+                print('UWB: anchor 0x%04X: registering at the tag' % addr)
                 tag_addr = None
                 while tag_addr is None:
                     if self._stop.is_set():
@@ -75,16 +81,15 @@ class UwbNode(Node):
                     tag_addr = register_with_tag(addr, max_tries=1)
                 registered.append(addr)
                 self.uwb_publisher.publish_anchors(registered)
-                self.uwb_publisher.publish_status(
-                    'anchor 0x%04X: registered at tag 0x%04X' % (addr, tag_addr))
+                print('UWB: anchor 0x%04X: registered at tag 0x%04X' % (addr, tag_addr))
 
-            self.uwb_publisher.publish_status('ready: anchors %s registered at tag 0x%04X' % (
+            print('UWB: ready: anchors %s registered at tag 0x%04X' % (
                 ', '.join('0x%04X' % a for a in registered), tag_addr))
 
             self._handle_events(anchors)
         except Exception as e:
             self.get_logger().error('UWB failed: %s' % e)
-            self.uwb_publisher.publish_status('error: %s' % e)
+            print('error: %s' % e)
 
     def _handle_events(self, anchors):
         """
