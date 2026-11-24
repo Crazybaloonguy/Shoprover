@@ -25,6 +25,9 @@ def generate_launch_description():
                 # Goal for Nav2 (follow_point.xml): fixed frame and topic.
                 'goal_frame': 'odom',
                 'goal_topic': 'goal_update',
+                # Seconds between two goals; the filter runs on every round
+                # in between (~10 rounds at 20 rounds/s).
+                'publish_period': 0.5,
             }],
         ),
     ])

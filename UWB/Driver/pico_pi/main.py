@@ -7,7 +7,9 @@ addresses in `anchors`. Start this first, then the anchors.
 
 Then the ranging (see ranging.py): one DS-TWR exchange with each anchor in
 turn, ANCHOR_GAP_MS apart, so every anchor gets its current distance to
-the tag; this round repeats every RANGING_INTERVAL_MS.
+the tag; this round repeats every RANGING_INTERVAL_MS (or right away, if it
+took longer). Every STATS_INTERVAL_MS a summary is printed: rounds, failed
+exchanges and the smallest slack of the final (see ranging.take_slack).
 """
 
 import utime as time
@@ -18,7 +20,7 @@ from decadriver import deca_regs as R
 from decadriver.deca_types import DwtConfig
 from config_options import txconfig_options
 from handshake import collect_anchors
-from ranging import range_anchor, set_antenna_delays
+from ranging import range_anchor, set_antenna_delays, take_slack, RESP_RX_TO_FINAL_TX_DLY_UUS
 
 APP_NAME = "HANDSHAKE TAG (MicroPython) v0.1"
 
@@ -42,9 +44,12 @@ config = DwtConfig(
 TAG_ADDR = 0x0100
 ANCHOR_COUNT = 3
 
-# Ranging: pause between two anchors, and from round start to round start.
+# Ranging: pause between two anchors, and from round start to round start
+# (50 ms = 20 rounds/s; a round takes ~100 ms as long as the delays in
+# ranging.py are 15 ms, then the next one starts right away).
 ANCHOR_GAP_MS = 1
-RANGING_INTERVAL_MS = 1000
+RANGING_INTERVAL_MS = 50
+STATS_INTERVAL_MS = 1000    # summary on the console
 
 
 def on_register(addr, is_new):
@@ -85,16 +90,29 @@ def main():
 
         print("Ranging every %d ms, %d ms between anchors (Ctrl-C to stop)"
               % (RANGING_INTERVAL_MS, ANCHOR_GAP_MS))
+        rounds, failed = 0, {}
+        t_stats = time.ticks_ms()
         while True:
             t_round = time.ticks_ms()
-            results = []
             for i, addr in enumerate(anchors):
                 if i > 0:
                     time.sleep_ms(ANCHOR_GAP_MS)
-                ok = range_anchor(TAG_ADDR, addr)
-                results.append("0x%04X %s" % (addr, "ok" if ok else "FAILED"))
-            print("ranging:", ", ".join(results))
-            # Wait for the rest of the interval (the exchanges themselves take ~35 ms each).
+                if not range_anchor(TAG_ADDR, addr):
+                    failed[addr] = failed.get(addr, 0) + 1
+            rounds += 1
+
+            # Summary instead of one line per round (20 lines/s would slow the tag down).
+            if time.ticks_diff(time.ticks_ms(), t_stats) >= STATS_INTERVAL_MS:
+                slack_min, sends, late = take_slack()
+                print("%d rounds/%d ms, failed: %s, final slack min %s us of %.0f us (%d sends, %d late)" % (
+                    rounds, time.ticks_diff(time.ticks_ms(), t_stats),
+                    ", ".join("0x%04X: %d" % a for a in failed.items()) or "none",
+                    "-" if slack_min is None else "%.0f" % slack_min,
+                    RESP_RX_TO_FINAL_TX_DLY_UUS * 512 / 499.2, sends, late))
+                rounds, failed = 0, {}
+                t_stats = time.ticks_ms()
+
+            # Wait for the rest of the interval.
             rest = RANGING_INTERVAL_MS - time.ticks_diff(time.ticks_ms(), t_round)
             if rest > 0:
                 time.sleep_ms(rest)

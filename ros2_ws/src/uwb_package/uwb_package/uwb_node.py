@@ -8,8 +8,12 @@ and registers each anchor at the tag (handshake, see driver/handshake.py).
 After that the tag ranges the anchors one after the other (DS-TWR, see
 driver/ranging.py); each anchor computes its distance to the tag. Once
 every anchor has a new distance, the position of the tag (x/y relative to
-the vehicle) is computed by trilateration and published on
-goal_update (goal for Nav2). The DW3000 work runs in a worker
+the vehicle) is computed by trilateration (the unknown height of the tag
+is estimated on the way, see get_coordinates) and transformed into the
+fixed frame goal_frame with the current pose of the vehicle (TF). There it
+goes through a Kalman filter after every round; every publish_period the
+filtered position is published on goal_update (goal for Nav2), so it is
+based on all rounds since (~10 at 20 rounds/s). The DW3000 work runs in a worker
 thread, so the node keeps spinning while it waits for the tag. Progress
 and results go out through UwbPublisher.
 
@@ -21,10 +25,12 @@ Parameters:
   goal_frame        fixed frame the goal for Nav2 is published in (default odom)
   goal_topic        topic of the goal for Nav2 (default goal_update, the topic
                     the GoalUpdater in Nav2's follow_point.xml listens on)
+  publish_period    s between two goals on goal_topic (default 0.5)
 """
 
 import math
 import threading
+import time
 
 import rclpy
 from rclpy.executors import ExternalShutdownException
@@ -36,9 +42,13 @@ from uwb_package.uwb_publisher import UwbPublisher
 
 class UwbNode(Node):
 
-    POINTS_PER_BATCH = 10   # positions collected before the filter runs and the result is sent
     KALMAN_R = 0.1 ** 2     # measurement noise: variance of one position in m^2 (here +-10 cm)
-    KALMAN_Q = 0.05 ** 2    # process noise: how far the tag may move between two points, m^2
+    KALMAN_Q = 0.025        # process noise: how much the tag may move, m^2 per second
+                            # (= (0.16 m)^2 in 1 s, (0.035 m)^2 between two rounds at 20/s)
+    STATS_PERIOD = 5.0      # s between two log lines with the slack of the responses
+    HEIGHT_ALPHA = 0.02     # weight of a new round in the running average of the tag's height
+    HEIGHT_MIN_ROUNDS = 20  # rounds before the estimated height is used
+    FIT_ITERATIONS = 10     # max. Gauss-Newton steps in _fit_with_height
 
     def __init__(self):
         super().__init__('uwb_node')
@@ -46,10 +56,17 @@ class UwbNode(Node):
         self.declare_parameter('anchor_positions', [0.0, 0.0])
         self.declare_parameter('goal_frame', 'odom')
         self.declare_parameter('goal_topic', 'goal_update')
+        self.declare_parameter('publish_period', 0.5)
+        self._publish_period = float(self.get_parameter('publish_period').value)
 
         self.uwb_publisher = UwbPublisher(self,
                                           goal_frame=self.get_parameter('goal_frame').value,
                                           goal_topic=self.get_parameter('goal_topic').value)
+        self._h2 = 0.0              # estimated (height of the tag above the anchors)^2, m^2
+        self._height_rounds = 0
+        self._kf_pos = None         # Kalman filter: estimated (x, y) in goal_frame, None = no point yet
+        self._kf_var = 0.0          # its variance, m^2 (the same for x and y)
+        self._kf_time = 0.0         # time of the last point, s (time.monotonic)
         self._stop = threading.Event()
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
@@ -93,18 +110,32 @@ class UwbNode(Node):
 
     def _handle_events(self, anchors):
         """
-        Listen on all anchors: log and publish every distance measured by
-        the tag's ranging, and log text messages (e.g. the tag's
-        "Hallo <address>" test, see driver/handshake.py).
+        Listen on all anchors: turn every complete round of distances into a
+        filtered position and publish it every publish_period, log text
+        messages (e.g. the tag's "Hallo <address>" test, see
+        driver/handshake.py), and every STATS_PERIOD the rate of the rounds
+        and the slack of the responses.
         """
         from uwb_package.driver import commmunication_utils as cu
+        from uwb_package.driver import ranging
 
         distances = [float('nan')] * len(anchors)
-        points = []
+        t_publish = t_stats = time.monotonic()
+        rounds = 0                                       # complete rounds since the last stats line
         while True:
             event = uwb_driver.receive_event(anchors, self._stop)
             if event is None:
                 return
+            now = time.monotonic()
+            if now - t_stats >= self.STATS_PERIOD:
+                # slack of the responses: how far POLL_RX_TO_RESP_TX_DLY_UUS could be lowered
+                slack_min, sends, late = ranging.take_slack()
+                self.get_logger().info(
+                    '%.1f rounds/s, response slack min %s us of %.0f us (%d sends, %d late)' % (
+                        rounds / (now - t_stats),
+                        '-' if slack_min is None else '%.0f' % slack_min,
+                        ranging.POLL_RX_TO_RESP_TX_DLY_UUS * 512 / 499.2, sends, late))
+                t_stats, rounds = now, 0
             if event[0] == 'range':
                 _, device, tag_addr, distance = event
                 if distance is None:
@@ -112,18 +143,23 @@ class UwbNode(Node):
                                               % (anchors[device], device, tag_addr))
                     continue
                 distances[device] = distance
-                self.get_logger().info('anchor 0x%04X (DW3000 %d): distance to tag 0x%04X: %.2f m'
-                                       % (anchors[device], device, tag_addr, distance))
+                # debug only (about 30 lines/s): --ros-args --log-level uwb_node:=debug
+                self.get_logger().debug('anchor 0x%04X (DW3000 %d): distance to tag 0x%04X: %.2f m'
+                                        % (anchors[device], device, tag_addr, distance))
                 if device == len(anchors) - 1 and not any(math.isnan(d) for d in distances):
                     pos = self.get_coordinates(distances)
-                    if pos is not None:
-                        points.append(pos)
-                        if len(points) == self.POINTS_PER_BATCH:
-                            self.uwb_publisher.publish_coordinates(self.kalman(points))
-                            points = []                              # start a new batch
+                    # into the fixed frame now, with the pose of the vehicle at this moment
+                    fixed = self.uwb_publisher.to_goal_frame(pos) if pos is not None else None
+                    if fixed is not None:
+                        tag, vehicle = fixed
+                        rounds += 1
+                        goal = self.kalman(tag, now)                 # filter every round ...
+                        if now - t_publish >= self._publish_period:  # ... send every publish_period
+                            self.uwb_publisher.publish_goal(goal, vehicle)
+                            t_publish = now
                     distances = [float('nan')] * len(anchors)        # start a new round
             else:
-                _, device, (code, src, dest, payload) = event
+                _, device, (code, src, _, payload) = event
                 if code == cu.MSG_TEXT:
                     self.get_logger().info('anchor 0x%04X (DW3000 %d) got from tag 0x%04X: "%s"' % (
                         anchors[device], device, src, payload.decode('utf-8', 'replace')))
@@ -135,7 +171,70 @@ class UwbNode(Node):
         super().destroy_node()
 
     def get_coordinates(self, distances):
-        """distances: [d, ...] in m -> (x, y) or None"""
+        """
+        distances: [d, ...] in m (3D, from the anchor to the tag) -> (x, y) of the
+        tag relative to the vehicle, or None
+
+        The tag is worn by a person and is higher than the anchors on the
+        vehicle by an unknown h, so d^2 = horizontal distance^2 + h^2.
+        All anchors are assumed to be at the same height.
+
+        1. _trilaterate: x, y without knowing h (h^2 is the same in every d^2
+           and cancels out). With 3 anchors this is exact for x, y and h, so
+           all the noise of the distances ends up in x, y.
+        2. h^2 is computed from this result and averaged over many rounds
+           (the tag on a person hardly changes its height); nothing has to be
+           measured or configured.
+        3. _fit_with_height: with this h fixed there are 3 distances for only
+           2 unknowns, the least squares fit averages out part of the noise.
+        """
+        pos = self._trilaterate(distances)
+        if pos is None:
+            return None
+        h2 = sum(d * d - (pos[0] - xi) ** 2 - (pos[1] - yi) ** 2
+                 for (xi, yi), d in zip(self.positions, distances)) / len(distances)
+        # noise can make h2 negative; it is averaged as is (clipping each round
+        # would bias the average upwards) and only clipped where it is used
+        self._height_rounds += 1
+        if self._height_rounds == 1:
+            self._h2 = h2
+        else:                      # running average, slowly follows changes
+            alpha = max(1.0 / self._height_rounds, self.HEIGHT_ALPHA)
+            self._h2 += alpha * (h2 - self._h2)
+        if self._height_rounds % 50 == 0:
+            self.get_logger().info('estimated height of the tag above the anchors: %.2f m'
+                                   % math.sqrt(max(self._h2, 0.0)))
+        if self._height_rounds < self.HEIGHT_MIN_ROUNDS:
+            return pos             # height not known well enough yet
+        return self._fit_with_height(pos, distances, max(self._h2, 0.0))
+
+    def _fit_with_height(self, start, distances, h2):
+        """
+        Gauss-Newton: (x, y) that best fits all distances with the height
+        difference h^2 fixed, starting at start -> (x, y)
+        """
+        x, y = start
+        for _ in range(self.FIT_ITERATIONS):
+            a11 = a12 = a22 = b1 = b2 = 0.0
+            for (xi, yi), d in zip(self.positions, distances):
+                rho = math.sqrt((x - xi) ** 2 + (y - yi) ** 2 + h2)
+                if rho < 1e-6:
+                    return start
+                jx, jy = (x - xi) / rho, (y - yi) / rho  # derivative of rho
+                r = d - rho                              # residual
+                a11 += jx * jx; a12 += jx * jy; a22 += jy * jy
+                b1 += jx * r;   b2 += jy * r
+            det = a11 * a22 - a12 * a12
+            if abs(det) < 1e-9:
+                return start
+            dx, dy = (a22 * b1 - a12 * b2) / det, (a11 * b2 - a12 * b1) / det
+            x, y = x + dx, y + dy
+            if dx * dx + dy * dy < 1e-8:                 # converged (step < 0.1 mm)
+                break
+        return x, y
+
+    def _trilaterate(self, distances):
+        """distances: [d, ...] in m -> (x, y) or None, independent of the height of the tag"""
         (x0, y0), d0 = self.positions[0], distances[0]
         a11 = a12 = a22 = b1 = b2 = 0.0
         for (xi, yi), di in zip(self.positions[1:], distances[1:]):
@@ -149,27 +248,28 @@ class UwbNode(Node):
         return ((a22 * b1 - a12 * b2) / det,
                 (a11 * b2 - a12 * b1) / det)
     
-    def kalman(self, points):
+    def kalman(self, point, t):
         """
-        Kalman filter over one batch of positions, x and y filtered
-        separately. Model: the tag stays where it is, but may move a little
-        between two points (process noise KALMAN_Q). Each point is a
-        measurement with noise KALMAN_R.
+        Kalman filter over the positions in the fixed frame, runs on with
+        every new point (a goal can go out after every round).
+        Model: the tag stays where it is, but may move a little; the longer
+        since the last point, the more (process noise KALMAN_Q per second).
+        Each point is a measurement with noise KALMAN_R. x and y are filtered
+        separately; with the same R and Q they share one variance.
 
-        points: [(x, y), ...] oldest first -> filtered (x, y) of the newest point
+        point: (x, y) just measured, t: its time in s -> filtered (x, y)
         """
-        return (self._kalman_1d([p[0] for p in points]),
-                self._kalman_1d([p[1] for p in points]))
-
-    def _kalman_1d(self, values):
-        estimate = values[0]          # start at the first measurement ...
-        variance = self.KALMAN_R      # ... which is as uncertain as any measurement
-        for z in values[1:]:
-            variance += self.KALMAN_Q                  # predict: the tag may have moved
-            gain = variance / (variance + self.KALMAN_R)
-            estimate += gain * (z - estimate)          # update: move towards the measurement
-            variance *= 1 - gain
-        return estimate
+        if self._kf_pos is None:          # start at the first measurement ...
+            self._kf_pos, self._kf_var = point, self.KALMAN_R   # ... as uncertain as any
+        else:
+            dt = max(t - self._kf_time, 0.0)
+            self._kf_var += self.KALMAN_Q * dt                  # predict: the tag may have moved
+            gain = self._kf_var / (self._kf_var + self.KALMAN_R)
+            self._kf_pos = (self._kf_pos[0] + gain * (point[0] - self._kf_pos[0]),   # update: move
+                            self._kf_pos[1] + gain * (point[1] - self._kf_pos[1]))   # towards it
+            self._kf_var *= 1 - gain
+        self._kf_time = t
+        return self._kf_pos
 
 
 def main(args=None):

@@ -48,6 +48,45 @@ FINAL_RESP_RX_TS_IDX = 4
 FINAL_FINAL_TX_TS_IDX = 8
 FINAL_PAYLOAD_LEN = 12
 
+# --- slack of the delayed sends ----------------------------------------------
+# Slack = time left between "ready to send" and the programmed send time of
+# the response (anchor) or the final (tag). If it gets negative, the send is
+# too late and the exchange fails. The smallest slack seen shows how far
+# POLL_RX_TO_RESP_TX_DLY_UUS (anchor) / RESP_RX_TO_FINAL_TX_DLY_UUS (tag)
+# can be lowered: delay - min slack = what this side really needs.
+SYS_TIME_ID = 0x1C                      # system time, same unit as DX_TIME (high 32 of 40 bits)
+DX_TIME_UNIT_US = 256 / (499.2 * 128)   # one unit in us (~4 ns)
+
+_slack_min_us = None    # smallest slack since the last take_slack()
+_slack_count = 0        # delayed sends since then
+_slack_late = 0         # of these, refused by the DW IC (send time already passed)
+
+
+def _note_slack(tx_time):
+    """Record the slack until the send time tx_time (DX_TIME units), just before starting TX."""
+    global _slack_min_us, _slack_count
+    ticks = (tx_time - dwt.dwt_read32bitreg(SYS_TIME_ID)) & 0xFFFFFFFF
+    if ticks >= 0x80000000:             # send time already passed -> negative
+        ticks -= 0x100000000
+    us = ticks * DX_TIME_UNIT_US
+    _slack_count += 1
+    if _slack_min_us is None or us < _slack_min_us:
+        _slack_min_us = us
+
+
+def _note_late():
+    """Record a delayed send the DW IC refused (send time already passed)."""
+    global _slack_late
+    _slack_late += 1
+
+
+def take_slack():
+    """(min slack in us or None, delayed sends, of these too late) since the last call; starts over."""
+    global _slack_min_us, _slack_count, _slack_late
+    result = (_slack_min_us, _slack_count, _slack_late)
+    _slack_min_us, _slack_count, _slack_late = None, 0, 0
+    return result
+
 
 def set_antenna_delays():
     dwt.dwt_setrxantennadelay(RX_ANT_DLY)
@@ -101,7 +140,9 @@ def range_anchor(my_addr: int, anchor_addr: int) -> bool:
         final_msg_set_ts(final, cu.MSG_HDR_LEN + FINAL_POLL_TX_TS_IDX, poll_tx_ts)
         final_msg_set_ts(final, cu.MSG_HDR_LEN + FINAL_RESP_RX_TS_IDX, resp_rx_ts)
         final_msg_set_ts(final, cu.MSG_HDR_LEN + FINAL_FINAL_TX_TS_IDX, final_tx_ts)
+        _note_slack(final_tx_time)
         if not _send(final, R.DWT_START_TX_DELAYED):
+            _note_late()
             return False
 
         while not (dwt.dwt_read32bitreg(R.SYS_STATUS_ID) & R.SYS_STATUS_TXFRS_BIT_MASK):
@@ -128,7 +169,9 @@ def respond(my_addr: int, tag_addr: int):
     dwt.dwt_setrxtimeout(FINAL_RX_TIMEOUT_UUS)
     try:
         resp = cu.build_msg(cu.MSG_RESP, tag_addr, my_addr)
+        _note_slack(resp_tx_time)
         if not _send(resp, R.DWT_START_TX_DELAYED | R.DWT_RESPONSE_EXPECTED):
+            _note_late()
             return None     # delayed TX time already passed
 
         msg = cu.parse_msg(_wait_frame(), my_addr)

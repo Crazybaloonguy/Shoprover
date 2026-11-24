@@ -96,14 +96,27 @@ ros2 launch uwb_package uwb.launch.py
 Zuerst den Tag starten.
 
 Nach dem Handshake misst der Tag reihum den Abstand zu jedem Anchor (erst Anchor 0, dann 1, dann 2, je
-1 ms Pause dazwischen). Jeder Anchor bekommt dabei nur seine eigene Messung, berechnet den Abstand und
-gibt ihn aus:
+1 ms Pause dazwischen). Jeder Anchor bekommt dabei nur seine eigene Messung und berechnet den Abstand. Die Abstände stehen nur im
+Debug-Log (etwa 30 Zeilen/s). Dafür den Node direkt starten
+(`ros2 run uwb_package uwb_node --ros-args --log-level uwb_node:=debug`, Parameter dann per `-p`) oder im
+Launch-File beim Node `arguments=['--ros-args', '--log-level', 'uwb_node:=debug']` ergänzen:
 
 ```
 [uwb_node]: anchor 0x0002 (DW3000 1): distance to tag 0x0100: 2.97 m
 ```
 
 Ist eine Messung fehlgeschlagen (z. B. Antwort zu spät), erscheint eine Warnung; die nächste Runde misst neu.
+
+Alle 5 s steht im Log, wie viele Runden pro Sekunde ankommen und wie viel Reserve die Antwort der Anchors hatte:
+
+```
+[uwb_node]: 9.8 rounds/s, response slack min 12900 us of 15385 us (147 sends, 0 late)
+```
+
+Reserve (`slack`) = Zeit zwischen "Antwort fertig" und dem festen Sendezeitpunkt. `15385 us − slack min` ist,
+was der Pi wirklich braucht; so weit (plus Sicherheitsabstand) lässt sich `POLL_RX_TO_RESP_TX_DLY_UUS` in
+`driver/ranging.py` senken. Der Tag gibt dasselbe für seinen FINAL aus (`RESP_RX_TO_FINAL_TX_DLY_UUS`).
+Beide Werte müssen in den `ranging.py` von Tag und Pi gleich sein.
 
 Zustand ansehen:
 
@@ -119,7 +132,7 @@ ros2 topic echo /goal_update
 |---|---|---|
 | `uwb/status` | `std_msgs/String` | Zustand, z. B. `anchor 0x0001: registered at tag 0x0100`, `ready: …`, `error: …` |
 | `uwb/anchors` | `std_msgs/UInt16MultiArray` | Adressen der beim Tag registrierten Anchors |
-| `goal_update` | `geometry_msgs/PoseStamped` | Position des Tags (nach jeweils 10 Positionen Kalman-gefiltert, Orientierung zeigt vom Fahrzeug zum Tag), per TF in den festen Frame `goal_frame` (Standard `odom`) umgerechnet; Ziel für Nav2 (siehe unten). Fehlt die Transformation, wird nichts gesendet und eine Warnung ausgegeben |
+| `goal_update` | `geometry_msgs/PoseStamped` | Position des Tags im festen Frame `goal_frame` (Standard `odom`): jede gemessene Position wird sofort per TF mit der aktuellen Pose des Fahrzeugs umgerechnet, dann in diesem Frame mit einem durchlaufenden Kalman-Filter geglättet; gesendet wird alle `publish_period` (0,5 s), also mit allen Runden seitdem (~10 bei 20 Runden/s). Orientierung zeigt vom Fahrzeug zum Tag. Ziel für Nav2 (siehe unten). Fehlt die Transformation, wird der Punkt verworfen und eine Warnung ausgegeben |
 
 `uwb/status` und `uwb/anchors` behalten den letzten Wert (transient local), auch später gestartete Nodes bekommen ihn.
 
@@ -133,7 +146,13 @@ Abstände haben deshalb einen konstanten Fehler.
 | `anchor_addresses` | `[1, 2, 3]` (Launch-File) | Adressen der Anchors, eine pro Modul in der Reihenfolge der CSn-Pins: die erste gehört zu Modul 0 (GPIO8), die zweite zu Modul 1 (GPIO7), die dritte zu Modul 2 (GPIO16) |
 | `goal_frame` | `odom` | fester Frame, in dem das Ziel für Nav2 gesendet wird (`odom` oder `map`) |
 | `goal_topic` | `goal_update` | Topic des Ziels für Nav2 |
+| `publish_period` | `0.5` | Sekunden zwischen zwei Zielen auf `goal_topic`; der Filter läuft dazwischen bei jeder Runde mit |
 | `anchor_positions` | siehe Launch-File | Position jedes Anchors in m relativ zum Fahrzeug als flache Liste `[x0, y0, x1, y1, …]`, gleiche Reihenfolge wie `anchor_addresses`; alle Werte als Float (`0.0`, nicht `0`) |
+
+Note: Die Anchors müssen alle auf gleicher Höhe sitzen. Die Höhe des Tags über den Anchors (Tag an einer Person, Rover
+niedriger) muss nicht angegeben werden: Der Node schätzt sie laufend aus den Messungen (gleitender Mittelwert,
+alle 50 Runden im Log: `estimated height of the tag above the anchors`) und nutzt sie nach 20 Runden, um die Position
+genauer zu bestimmen (3 Abstände für 2 Unbekannte statt 3 für 3).
 
 Note: Der Tag muss auf genau so viele Anchors warten, wie `anchor_addresses` Einträge hat.
 
