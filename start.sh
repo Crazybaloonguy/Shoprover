@@ -31,13 +31,17 @@ sleep 3
 ros2 launch hoverboard_demo_bringup hoverboard.launch.py &
 sleep 5
 
-ros2 launch slam_toolbox online_async_launch.py \
-    use_sim_time:=false \
-    slam_params_file:="$CONFIG/mapper_params_online_async.yaml" &
+#ros2 launch slam_toolbox online_async_launch.py \
+#    use_sim_time:=false \
+#    slam_params_file:="$CONFIG/mapper_params_online_async.yaml" &
 sleep 5
 
-ros2 launch nav2_bringup navigation_launch.py \
-    use_sim_time:=false \
-    params_file:="$CONFIG/nav2.yaml" &
+#ros2 launch nav2_bringup navigation_launch.py \
+#    use_sim_time:=false \
+#    params_file:="$CONFIG/nav2.yaml" &
+
+ros2 launch nav2_bringup bringup_launch.py use_sim_time:=false slam:=False \
+  params_file:="$CONFIG/nav2_amcl.yaml" \
+  map:=/home/shoprover/Desktop/map2/shoprover.yaml &
 
 wait
